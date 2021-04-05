@@ -1,13 +1,16 @@
-import numpy as np
-import pandas as pd
 import os
 import re
 import pickle
 from collections import OrderedDict
-from sklearn.model_selection import train_test_split
 from functools import wraps
 
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+
 def run_once_property(fn):
+    r"""Run fn once, when called the first time and then keep the result in memory."""
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         try:
@@ -19,7 +22,9 @@ def run_once_property(fn):
             return instance
     return property(wrapper)
 
+
 def requires(*attrs, error_msg=''):
+    r"""If attrs aren't defined, raises error."""
     def decorator(fn):
         @wraps(fn)
         def wrapper(self, *args, **kwargs):
@@ -31,6 +36,8 @@ def requires(*attrs, error_msg=''):
 
 
 class Dataset:
+    r"""
+    """
     trial_length = 3  # in seconds
     num_trials = 100
     raw_dir = 'raw/'
@@ -40,10 +47,10 @@ class Dataset:
     def __init__(self, root_dir, force_process=False):
         self.root_dir = root_dir
 
-        ## Process data
         # check if already processed
         already_processed, filename = self._look_for_processed_file()
 
+        # if not processed or force_process
         if not(already_processed) or force_process:
             print('Processing data.')
             # process
@@ -106,94 +113,18 @@ class Dataset:
         trial_table = pd.DataFrame({'trial': trial_id, 'orientation': orientation})
         return trial_table
 
+    def save(self, filename):
+        with open(filename, 'wb') as output:  # will overwrite it
+            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
+
     def load(self, filename):
         with open(filename, 'rb') as input:
             processed = pickle.load(input)
         self.__dict__ = processed.__dict__.copy()  # doesn't need to be deep
 
-    def save(self, filename):
-        with open(filename, 'wb') as output:  # will overwrite it
-            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
-
-    def split_cell_train_val_test(self, test_size=0.2, val_size=0.2, seed=1234):
-        train_val_mask, test_mask = train_test_split(np.arange(len(self.cell_ids)), test_size=test_size, random_state=seed,
-                                                     stratify=self.cell_type_ids)
-
-        val_size = val_size / (1 - test_size) # adjust val size
-        train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed,
-                                                stratify=self.cell_type_ids[train_val_mask])
-        self._cell_split_masks = {'train': train_mask, 'val': val_mask, 'test': test_mask}
-
-    def split_trial_train_val_test(self, test_size=0.2, val_size=0.2, temp=True, seed=1234):
-        train_val_mask, test_mask = train_test_split(np.arange(len(self.trial_table)), test_size=test_size,
-                                                     random_state=seed, shuffle=not temp)
-
-        val_size = val_size / (1 - test_size)  # adjust val size
-        train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed, shuffle=not temp)
-        self._trial_split_masks = {'train': train_mask, 'val': val_mask, 'test': test_mask}
-
-    def set_bining_parameters(self, bin_size):
-        self.bin_size = bin_size
-
-    @run_once_property
-    def cell_type_lookup_table(self):
-        out = {}
-        for split in ['train', 'val', 'test']:
-            cell_type_lookup_table = []
-            for cell_label_id in range(len(self.cell_type_labels)):
-                mask  = self.cell_type_ids[self._cell_split_masks[split]] == cell_label_id
-                cell_type_lookup_table.append(mask)
-            out[split] = cell_type_lookup_table
-        return out
-
-    @requires('_cell_split_masks', '_trial_split_masks', error_msg='Split dataset first.')
-    def sample(self, mode='train', sampler='U100', cell_random_seed=None, trial_random_seed=None, trial_id=None):
-        assert mode in ['train', 'val', 'test']
-        sampler_type = sampler[0]
-        assert sampler_type == 'U'
-        num_cells_per_class = int(sampler[1:])
-
-        # select neurons
-        if cell_random_seed:
-            np.random.seed(cell_random_seed)
-        split_mask = self._cell_split_masks[mode]
-        split_lookup_table = self.cell_type_lookup_table[mode]
-        select_mask = []
-        for i in range(len(self.cell_type_labels)):
-            select_mask.append(np.random.choice(split_mask, num_cells_per_class, replace=False,
-                                                p=split_lookup_table[i]/split_lookup_table[i].sum()))
-        select_mask = np.concatenate(select_mask)
-
-        # select trial
-        if trial_id is None:
-            if trial_random_seed is not None:
-                np.random.seed(trial_random_seed)
-            trial_id = np.random.choice(self._trial_split_masks[mode])
-        # todo else verify that this is not for training.
-        trial_info = self.get_trial_info(trial_id)
-
-        # bin data for selected samples
-        start_time, end_time = trial_info['start_time'], trial_info['end_time']
-
-        num_cells = len(select_mask)
-        num_bins = int((end_time - start_time) / self.bin_size)
-
-        bins = np.linspace(start_time, end_time, num_bins+1)  # arange doesn't work
-
-        X = np.zeros((num_bins, num_cells))
-        y = np.zeros((num_cells,))
-        for i, cell in enumerate(select_mask):
-            y[i] = self.cell_type_ids[cell]
-            cell_spike_times = self.spike_times[cell]
-            if np.isnan(cell_spike_times[0]):
-                # cell that never fires
-                # todo remove this from cell table
-                continue
-            X[:, i] = self._bin_data(cell_spike_times, bins)
-
-        # additionnal metadata
-        m = {'trial_id': trial_id, 'orientation': trial_info['orientation']}
-        return X, y, m
+    @property
+    def num_cell_types(self):
+        return len(self.cell_type_labels)
 
     def get_trial_info(self, trial_id):
         start_time = trial_id * 3  # 3 seconds
@@ -202,16 +133,13 @@ class Dataset:
         orientation = self.trial_table.loc[trial_id, 'orientation']
         return {'start_time': start_time, 'end_time': end_time, 'orientation': orientation}
 
-    @requires('bin_size', error_msg='Set binning parameters first.')
-    def _bin_data(self, spike_times, bins):
-        firing_rates, _ = np.histogram(spike_times, bins)
-        return firing_rates.astype(int)
-
-    @property
-    def num_cell_types(self):
-        return len(self.cell_type_labels)
-
     def aggregate_cell_classes(self, aggr_dict):
+        r"""Groups cell sub-classes into aggregates. The :obj:`aggr_dict` defines where each cell class is mapped to.
+
+        Will handle changing the labels for all neurons in the data.
+        ..note ::
+            Use to map all 21 cell types to 2 classes for example (excitatory and inhibitory).
+        """
         aggregates = OrderedDict()
         aggregation_map = []
         for cell_type in self.cell_type_labels:
@@ -225,8 +153,171 @@ class Dataset:
         new_cell_type_ids = aggregation_map[self.cell_type_ids]
         self.cell_type_labels, self.cell_type_ids = new_cell_type_labels, new_cell_type_ids
 
+    def split_cell_train_val_test(self, test_size=0.2, val_size=0.2, seed=1234):
+        train_val_mask, test_mask = train_test_split(np.arange(len(self.cell_ids)), test_size=test_size, random_state=seed,
+                                                     stratify=self.cell_type_ids)
+
+        val_size = val_size / (1 - test_size) # adjust val size
+        train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed,
+                                                stratify=self.cell_type_ids[train_val_mask])
+        self._cell_split = {'train': train_mask, 'val': val_mask, 'test': test_mask}
+
+    def split_trial_train_val_test(self, test_size=0.2, val_size=0.2, temp=True, seed=1234):
+        train_val_mask, test_mask = train_test_split(np.arange(len(self.trial_table)), test_size=test_size,
+                                                     random_state=seed, shuffle=not temp)
+
+        val_size = val_size / (1 - test_size)  # adjust val size
+        train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed, shuffle=not temp)
+        self._trial_split = {'train': train_mask, 'val': val_mask, 'test': test_mask}
+
+    def set_bining_parameters(self, bin_size):
+        self.bin_size = bin_size
+
+    @run_once_property
+    def cell_type_lookup_table(self):
+        out = {}
+        for split in ['train', 'val', 'test']:
+            cell_type_lookup_table = []
+            for cell_label_id in range(len(self.cell_type_labels)):
+                mask = self.cell_type_ids[self._cell_split[split]] == cell_label_id
+                cell_type_lookup_table.append(mask)
+            out[split] = cell_type_lookup_table
+        return out
+
+    def _uniform_sampler(self, mode, nbr_cells_per_class, random_seed=None):
+        r""""""
+        if random_seed:
+            np.random.seed(random_seed)
+        split_mask = self._cell_split[mode]
+        split_lookup_table = self.cell_type_lookup_table[mode]
+        select_mask = []
+        for i in range(len(self.cell_type_labels)):
+            select_mask.append(np.random.choice(split_mask, nbr_cells_per_class, replace=False,
+                                                p=split_lookup_table[i]/split_lookup_table[i].sum()))
+        return np.concatenate(select_mask)
+
+    def _balanced_sampler(self, mode, total_nbr_cells, random_seed=None):
+        r""""""
+        # todo use train_test_split with startify
+        raise NotImplementedError
+
+    @requires('bin_size', error_msg='Set binning parameters first.')
+    def _bin_data(self, select_mask, start_time, end_time):
+        num_cells = len(select_mask)
+        num_bins = int((end_time - start_time) / self.bin_size)
+
+        bins = np.linspace(start_time, end_time, num_bins + 1)  # arange doesn't work
+
+        X = np.zeros((num_bins, num_cells))
+        for i, cell in enumerate(select_mask):
+            cell_spike_times = self.spike_times[cell]
+            if np.isnan(cell_spike_times[0]):
+                # cell that never fires
+                # todo remove this from cell table
+                continue
+            firing_rates, _ = np.histogram(cell_spike_times, bins)
+            X[:, i] = firing_rates.astype(int)
+        return X
+
+    def _select_data(self, select_mask, start_time, end_time):
+        X = []
+        for i, cell in enumerate(select_mask):
+            cell_spike_times = self.spike_times[cell]
+            if np.isnan(cell_spike_times[0]):
+                # cell that never fires
+                # todo remove this from cell table
+                X.append(np.array([]))
+                continue
+            # only keep spike times between start_time and end_time
+            cell_spike_times = cell_spike_times[(start_time <= cell_spike_times) & (cell_spike_times <= end_time)]
+            cell_spike_times = np.sort(cell_spike_times)
+            X.append(cell_spike_times)
+        X = np.array(X)
+        return X
+
+    @staticmethod
+    def parse_mode(mode):
+        assert mode in ['train', 'val', 'test', 'val_time', 'test_time', 'val_cell', 'test_cell']
+        l = mode.split('_')
+        if len(l) == 1:
+            cell_mode = time_mode = mode
+        else:
+            if l[1] == 'time':
+                cell_mode = 'train'
+                time_mode = l[0]
+            else:  # l[1] == 'cell':
+                cell_mode = l[0]
+                time_mode = 'train'
+        return cell_mode, time_mode
+
+    def get_trials(self, mode=None):
+        if mode is None:
+            return np.arrange(len(self.trial_table))
+        else:
+            cell_mode, time_mode = self.parse_mode(mode)
+            return self._trial_split[time_mode]
+
+    @requires('_cell_split', '_trial_split', error_msg='Split dataset first.')
+    def sample(self, mode='train', sampler='U100', transform=None,
+               cell_random_seed=None, trial_random_seed=None, trial_id=None):
+
+        cell_mode, time_mode = self.parse_mode(mode)
+
+        ### Sample population
+        # parse sampler information
+        sampler_type = sampler[0]
+        sampler_param = int(sampler[1:])
+        if sampler_type == 'U':
+            sampler = self._uniform_sampler
+        elif sampler_type == 'B':
+            sampler = self._balanced_sampler
+        else:
+            raise ValueError('Sampler %s does not exist.' % sampler_type)
+
+        # sample cells
+        # todo probably want to use fine cell labels when doing this.
+        #  If the number of cell types is reduced to 2 for example
+        select_mask = sampler(cell_mode, sampler_param, random_seed=cell_random_seed)
+
+        # select trial
+        if trial_id is None:
+            # then random pick one
+            if trial_random_seed is not None:
+                np.random.seed(trial_random_seed)
+            trial_id = np.random.choice(self._trial_split[time_mode])
+        else:
+            # raise error if trial_id is from a different subset
+            assert trial_id in self._trial_split[time_mode]
+        trial_info = self.get_trial_info(trial_id)
+
+        # todo currently the trials are forced to be split into blocks
+        start_time, end_time = trial_info['start_time'], trial_info['end_time']
+
+        ### Transform data
+        if transform is None:
+            # X will be an array of arrays, each row will contain a vector that will have a dynamic shape
+            X = self._select_data(select_mask, start_time, end_time)
+        elif transform == 'firing_rate':
+            # X will be a square matrix with shape: (num_bins, num_cells)
+            X = self._bin_data(select_mask, start_time, end_time)
+        elif transform == 'interspike_interval':
+            # X will be an array of arrays, each row will contain a vector that will have a dynamic shape
+            X = self._select_data(select_mask, start_time, end_time)
+            # just compute diff
+            X = np.array([np.diff(x) for x in X])
+        else:
+            raise ValueError('Transform method %r does not exist' %transform)
+
+        # Get labels
+        y = self.cell_type_ids[select_mask]
+
+        # Get any additional metadata
+        m = {'trial_id': trial_id, 'orientation': trial_info['orientation']}
+        return X, y, m
+
 
 if __name__ == '__main__':
+    # todo add examples here
     dataset = Dataset('./data')
 
     aggr_dict = {'e23Cux2': 'e23', 'i5Sst': 'i5Sst', 'i5Htr3a': 'i5Htr3a', 'e4Scnn1a': 'e4', 'e4Rorb': 'e4',
