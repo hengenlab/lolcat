@@ -186,14 +186,13 @@ class Dataset:
 
     def _uniform_sampler(self, mode, nbr_cells_per_class, random_seed=None):
         r""""""
-        if random_seed:
-            np.random.seed(random_seed)
+        rng = np.random.default_rng(random_seed)
         split_mask = self._cell_split[mode]
         split_lookup_table = self.cell_type_lookup_table[mode]
         select_mask = []
         for i in range(len(self.cell_type_labels)):
-            select_mask.append(np.random.choice(split_mask, nbr_cells_per_class, replace=False,
-                                                p=split_lookup_table[i]/split_lookup_table[i].sum()))
+            select_mask.append(rng.choice(split_mask, nbr_cells_per_class, replace=False,
+                                          p=split_lookup_table[i]/split_lookup_table[i].sum()))
         return np.concatenate(select_mask)
 
     def _balanced_sampler(self, mode, total_nbr_cells, random_seed=None):
@@ -282,9 +281,8 @@ class Dataset:
         # select trial
         if trial_id is None:
             # then random pick one
-            if trial_random_seed is not None:
-                np.random.seed(trial_random_seed)
-            trial_id = np.random.choice(self._trial_split[time_mode])
+            rng = np.random.default_rng(trial_random_seed)
+            trial_id = rng.choice(self._trial_split[time_mode])
         else:
             # raise error if trial_id is from a different subset
             assert trial_id in self._trial_split[time_mode]
