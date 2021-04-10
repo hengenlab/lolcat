@@ -40,12 +40,14 @@ class Dataset:
     """
     trial_length = 3  # in seconds
     num_trials = 100
+    min
     raw_dir = 'raw/'
     processed_dir = 'processed/'
     processed_file = 'dataset.pkl'
 
-    def __init__(self, root_dir, force_process=False):
+    def __init__(self, root_dir, data_source='V1', labels_col = 'pop_name', force_process=False):
         self.root_dir = root_dir
+        self.data_source = data_source
 
         # check if already processed
         already_processed, filename = self._look_for_processed_file()
@@ -57,32 +59,82 @@ class Dataset:
             self.cell_ids, self.cell_type_ids, self.cell_type_labels = self._load_cell_metadata()
             self.spike_times = self._load_spike_data()
             self.trial_table = self._load_trial_data()
-
+          
             # pickle
             self.save(filename)
         else:
             print('Found processed pickle. Loading from %r.' % filename)
             self.load(filename)
+        
+        self._trial_split = {'train': np.arange(len(self.trial_table)), 'val': np.arange(len(self.trial_table)), 'test': np.arange(len(self.trial_table))}
+            
+    def drop_dead_cells(self,cutoff=1):
+        # drop cells here
+        keep_mask = [True if ((sts.size >= cutoff) & (np.isnan(np.sum(sts)))==False) else False for sts in self.spike_times ]# find neurons that satisfy the criteria in self.spike_times
+        self.spike_times = self.spike_times[keep_mask]
+        self.cell_ids = self.cell_ids[keep_mask]
+        self.cell_type_ids = self.cell_type_ids[keep_mask]
+        
+    def drop_other_classes(self,classes_to_keep):
+        keep_mask = [True if self.cell_type_labels[cell_type] in classes_to_keep else False for cell_type in self.cell_type_ids]
+        self.spike_times = self.spike_times[keep_mask]
+        self.cell_ids = self.cell_ids[keep_mask]
+        self.cell_type_ids = self.cell_type_ids[keep_mask]
+        shift_dict = dict(zip(range(len(self.cell_type_labels)),range(len(self.cell_type_labels))))
+        proceeding_numbers = []
+        bad_nums = []
+        for i in reversed(range(len(self.cell_type_labels))):
+            if i in self.cell_type_ids:
+                pass
+            else:
+                bad_nums.append(i)
+                for pn in proceeding_numbers:
+                    shift_dict[pn]-=1
+            proceeding_numbers.append(i)
+        self.cell_type_ids = np.asarray([int(shift_dict[i]) for i in self.cell_type_ids])
+        self.cell_type_labels = np.asarray([l for i,l in enumerate(self.cell_type_labels) if i not in bad_nums])
+                      
 
     def _look_for_processed_file(self):
         filename = os.path.join(self.root_dir, self.processed_dir, self.processed_file)
         return os.path.exists(filename), filename
 
     def _load_cell_metadata(self):
-        filename = os.path.join(self.root_dir, self.raw_dir, 'v1_nodes.csv')
+        data_source, labels_col = self.data_source, self.labels_col
+        if data_source == 'v1':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'v1_nodes.csv')
+        elif data_source == 'neuropixels_celltypes':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'neuropixels_celltypes_nodes.csv')
+        elif data_source == 'neuropixels_regions':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'neuropixels_regions_nodes.csv')
+        elif data_source == 'neuropixels_structures':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'neuropixels_structures_nodes.csv')
+        
+        elif data_source == 'calcium':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'calcium_nodes.csv')
+        else:
+            raise ValueError('Sampler %s does not exist.' % data_source)
+            
         df = pd.read_csv(filename, sep=' ')
 
         # Get rid of the LIF neurons, keeping only biophysically realistic ones
-        df = df[~df['pop_name'].str.startswith('LIF')]
-        df.sort_index()
+        if (data_source == 'v1') & (labels_col == 'pop_name'):
+            df = df[~df['pop_name'].str.startswith('LIF')]
+            df.sort_index()
 
         cell_ids = df.id.to_numpy()
         # Get cell types
-        cell_type_ids, cell_type_labels = pd.factorize(df.pop_name)  # get unique values and reverse lookup table
+        cell_type_ids, cell_type_labels = pd.factorize(df[labels_col])  # get unique values and reverse lookup table
         return cell_ids, cell_type_ids, cell_type_labels.to_list()
 
     def _load_spike_data(self):
-        filename = os.path.join(self.root_dir, self.raw_dir, 'spikes.csv')
+        data_source = self.data_source
+        if data_source == 'v1':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'spikes.csv')
+        elif data_source == 'neuropixels':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'neuropixels_spikes.csv')
+        elif data_source == 'calcium':
+            filename = os.path.join(self.root_dir, self.raw_dir, 'calcium_spikes.csv')
         df = pd.read_csv(filename, sep=' ', usecols=['timestamps', 'node_ids'])  # only load the necessary columns
         df.timestamps = df.timestamps / 1000  # convert to seconds
 
@@ -97,7 +149,10 @@ class Dataset:
         return spiketimes
 
     def _load_trial_data(self):
+        data_source = self.data_source
         filename = os.path.join(self.root_dir, self.raw_dir, 'gratings_order.txt')
+        if data_source in ['calcium','neuropixels']:
+            print('{} trial data not yet implemented. Using V1 trial data.'.format(data_source))
         df = pd.read_csv(filename, engine='python', sep='  ', skiprows=12, usecols=[3], names=['filename'])
         assert len(df) == self.num_trials
 
@@ -128,8 +183,7 @@ class Dataset:
 
     def get_trial_info(self, trial_id):
         start_time = trial_id * 3  # 3 seconds
-        end_time = start_time + 3
-
+        end_time = start_time + (3*self.num_trials_in_window)
         orientation = self.trial_table.loc[trial_id, 'orientation']
         return {'start_time': start_time, 'end_time': end_time, 'orientation': orientation}
 
@@ -158,6 +212,8 @@ class Dataset:
                                                      stratify=self.cell_type_ids)
 
         val_size = val_size / (1 - test_size) # adjust val size
+        
+             
         train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed,
                                                 stratify=self.cell_type_ids[train_val_mask])
         self._cell_split = {'train': train_mask, 'val': val_mask, 'test': test_mask}
@@ -194,7 +250,32 @@ class Dataset:
             select_mask.append(rng.choice(split_mask, nbr_cells_per_class, replace=False,
                                           p=split_lookup_table[i]/split_lookup_table[i].sum()))
         return np.concatenate(select_mask)
-
+    
+    def _uniform_resampler(self, mode, nbr_cells_per_class, random_seed=None):
+        r""""""
+        rng = np.random.default_rng(random_seed)
+        split_mask = self._cell_split[mode]
+        split_lookup_table = self.cell_type_lookup_table[mode]
+        select_mask = []
+        for i in range(len(self.cell_type_labels)):
+            if nbr_cells_per_class <= split_lookup_table[i].sum():
+                select_mask.append(rng.choice(split_mask, nbr_cells_per_class, replace=False,
+                                              p=split_lookup_table[i]/split_lookup_table[i].sum()))
+            else:
+                ss_mask = []
+                for rs in range(nbr_cells_per_class//split_lookup_table[i].sum()):
+                    ss_mask.append(rng.choice(split_mask, split_lookup_table[i].sum(), replace=False,
+                                              p=split_lookup_table[i]/split_lookup_table[i].sum()))
+                print(self.cell_type_labels[i],nbr_cells_per_class,split_lookup_table[i].sum())
+                if nbr_cells_per_class%split_lookup_table[i].sum() != 0:
+                    print('triggered')
+                    ss_mask.append(rng.choice(split_mask, nbr_cells_per_class%split_lookup_table[i].sum(), replace=False,
+                                                  p=split_lookup_table[i]/split_lookup_table[i].sum()))
+                select_mask.append(np.hstack(ss_mask))
+            
+        return np.concatenate(select_mask)
+    
+    
     def _balanced_sampler(self, mode, total_nbr_cells, random_seed=None):
         r""""""
         # todo use train_test_split with startify
@@ -258,7 +339,7 @@ class Dataset:
 
     @requires('_cell_split', '_trial_split', error_msg='Split dataset first.')
     def sample(self, mode='train', sampler='U100', transform=None,
-               cell_random_seed=None, trial_random_seed=None, trial_id=None):
+               cell_random_seed=None, trial_random_seed=None, trial_id=None, remove_silents=False):
 
         cell_mode, time_mode = self.parse_mode(mode)
 
@@ -270,6 +351,8 @@ class Dataset:
             sampler = self._uniform_sampler
         elif sampler_type == 'B':
             sampler = self._balanced_sampler
+        elif sampler_type == 'R':
+            sampler = self._uniform_resampler
         else:
             raise ValueError('Sampler %s does not exist.' % sampler_type)
 
@@ -277,7 +360,8 @@ class Dataset:
         # todo probably want to use fine cell labels when doing this.
         #  If the number of cell types is reduced to 2 for example
         select_mask = sampler(cell_mode, sampler_param, random_seed=cell_random_seed)
-
+        
+        
         # select trial
         if trial_id is None:
             # then random pick one
@@ -305,7 +389,7 @@ class Dataset:
             X = np.array([np.diff(x) for x in X])
         else:
             raise ValueError('Transform method %r does not exist' %transform)
-
+       
         # Get labels
         y = self.cell_type_ids[select_mask]
 
