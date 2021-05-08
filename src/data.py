@@ -206,6 +206,7 @@ class Dataset:
         new_cell_type_labels = list(aggregates.keys())
         new_cell_type_ids = aggregation_map[self.cell_type_ids]
         self.cell_type_labels, self.cell_type_ids = new_cell_type_labels, new_cell_type_ids
+        print(set(self.cell_type_ids),self.cell_type_labels)
 
     def split_cell_train_val_test(self, test_size=0.2, val_size=0.2, seed=1234):
         train_val_mask, test_mask = train_test_split(np.arange(len(self.cell_ids)), test_size=test_size, random_state=seed,
@@ -266,9 +267,7 @@ class Dataset:
                 for rs in range(nbr_cells_per_class//split_lookup_table[i].sum()):
                     ss_mask.append(rng.choice(split_mask, split_lookup_table[i].sum(), replace=False,
                                               p=split_lookup_table[i]/split_lookup_table[i].sum()))
-                print(self.cell_type_labels[i],nbr_cells_per_class,split_lookup_table[i].sum())
                 if nbr_cells_per_class%split_lookup_table[i].sum() != 0:
-                    print('triggered')
                     ss_mask.append(rng.choice(split_mask, nbr_cells_per_class%split_lookup_table[i].sum(), replace=False,
                                                   p=split_lookup_table[i]/split_lookup_table[i].sum()))
                 select_mask.append(np.hstack(ss_mask))
@@ -339,7 +338,7 @@ class Dataset:
 
     @requires('_cell_split', '_trial_split', error_msg='Split dataset first.')
     def sample(self, mode='train', sampler='U100', transform=None,
-               cell_random_seed=None, trial_random_seed=None, trial_id=None, remove_silents=False):
+               cell_random_seed=None, trial_random_seed=None, trial_id=None, remove_silents=False, preselected_mask=None):
 
         cell_mode, time_mode = self.parse_mode(mode)
 
@@ -359,8 +358,10 @@ class Dataset:
         # sample cells
         # todo probably want to use fine cell labels when doing this.
         #  If the number of cell types is reduced to 2 for example
-        select_mask = sampler(cell_mode, sampler_param, random_seed=cell_random_seed)
-        
+        if preselected_mask is None:
+            select_mask = sampler(cell_mode, sampler_param, random_seed=cell_random_seed)
+        else:
+            select_mask = preselected_mask
         
         # select trial
         if trial_id is None:
@@ -387,6 +388,14 @@ class Dataset:
             X = self._select_data(select_mask, start_time, end_time)
             # just compute diff
             X = np.array([np.diff(x) for x in X])
+        elif transform == 'log_interspike_interval':
+            # X will be an array of arrays, each row will contain a vector that will have a dynamic shape
+            X = self._select_data(select_mask, start_time, end_time)
+            # just compute diff
+            X = np.array([np.diff(x) for x in X])
+            X = np.array([np.log(x) for x in X])
+            X_mins = np.array([np.min(x) for x in X if len(x) > 0])
+            X_maxes = np.array([np.max(x) for x in X if len(x) > 0])
         else:
             raise ValueError('Transform method %r does not exist' %transform)
        
