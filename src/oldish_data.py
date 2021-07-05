@@ -7,34 +7,7 @@ from functools import wraps
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from torch.nn import AvgPool1d
-from torch import tensor
-import numpy as np
 
-def add_random_noise(x, augmentation_perc=1, sigma=0.1):
-    r"""Add/subtract a random amount of gaussian noise (sigma=std. dev.) to a subset (augmentation_perc=prob. to affect a bin) of histogram bins"""
-    add_noise = lambda hist : np.multiply(hist,np.random.normal(1,sigma,hist.size))
-    noisy_x = np.apply_along_axis(add_noise, 1, x)
-    draws = np.where(np.random.uniform(0,1,noisy_x.shape[1])>augmentation_perc)[0]
-    noisy_x[draws,:] = x[draws,:]
-    return noisy_x
-
-def moving_average(x, augmentation_perc=1, kernel_width=3):
-    r"""Rolling (kernel_width is diameter not radius) average of a subset (augmentation_perc=prob. to affect a bin) of histogram bins"""
-    assert kernel_width%2 == 1
-    padding = kernel_width//2
-    average = lambda hist : np.convolve(hist, np.ones(kernel_width)/kernel_width, mode='same')
-    averaged_x = np.apply_along_axis(average, 1, x)
-    draws = np.where(np.random.uniform(0,1,averaged_x.shape[1])>augmentation_perc)[0]
-    averaged_x[draws,:] = x[draws,:]
-    return averaged_x
-
-#@LOUIS CODE AUGMENTATIONS TO SPIKES HERE
-def apply_preaugmentation_1(x):
-    raise NotImplementedError
-    
-def apply_preaugmentation_2(x):
-    raise NotImplementedError
 
 def run_once_property(fn):
     r"""Run fn once, when called the first time and then keep the result in memory."""
@@ -67,7 +40,8 @@ class Dataset:
     """
     trial_length = 3  # in seconds
     num_trials = 100
-    raw_dir = 'raw/'
+    #raw_dir = 'raw/'
+    raw_dir = ''
     processed_dir = 'processed/'
     processed_file = 'v1_dataset.pkl'
 
@@ -205,7 +179,7 @@ class Dataset:
         aggregation_map = np.array(aggregation_map)
 
         new_cell_type_labels = list(aggregates.keys())
-        new_cell_type_ids = aggregation_map[self.cell_type_ids.astype(int)]
+        new_cell_type_ids = aggregation_map[self.cell_type_ids]
         self.cell_type_labels, self.cell_type_ids = new_cell_type_labels, new_cell_type_ids
 
     def drop_dead_cells(self, cutoff=1):
@@ -230,21 +204,17 @@ class Dataset:
         assert unique_cell_type_ids.shape == unique_cell_type_ids[-1] + 1, "One cell class no longer has cells."
         
     def drop_other_classes(self, classes_to_keep):
+        
         keep_mask = [self.cell_type_labels[cell_type] in classes_to_keep for cell_type in self.cell_type_ids]
         keep_mask = np.array(keep_mask).astype(np.bool)
+        # relabel map
+        relabel_map = np.zeros(len(self.cell_type_ids))
+        relabel_map[keep_mask] = np.arange(keep_mask.sum())
 
         self.spike_times = self.spike_times[keep_mask]
         self.cell_ids = self.cell_ids[keep_mask]
-
-        # relabel map
-        relabel_mask = [cell_type in classes_to_keep for cell_type in self.cell_type_labels]
-        relabel_mask = np.array(relabel_mask).astype(np.bool)
-        relabel_map = np.zeros(len(relabel_mask))
-        relabel_map[relabel_mask] = np.arange(relabel_mask.sum()).astype(int)
-
         self.cell_type_ids = relabel_map[self.cell_type_ids[keep_mask]]
         self.cell_type_labels = [label for label, m in zip(self.cell_type_labels, keep_mask) if m]
-        
     ############################
     # SPLIT TO TRAIN/VAL/TEST #
     ###########################
@@ -359,7 +329,7 @@ class FiringRates:
 
 
 class ISIDistribution:
-    def __init__(self, bins, min_isi=0, max_isi=0.4,log=False,adaptive=False,augmentation_percs=[0,0],preaugmentation_percs=[0,0]):
+    def __init__(self, bins, min_isi=0, max_isi=0.4):
         self.bins = bins
         if isinstance(bins, int):
             self.num_bins = bins
@@ -367,46 +337,16 @@ class ISIDistribution:
             self.num_bins = len(bins) - 1
         self.min_isi = min_isi
         self.max_isi = max_isi
-        self.log = log
-        self.adaptive = adaptive
-        self.augmentation_percs = augmentation_percs
-        self.preaugmentation_percs = preaugmentation_percs
 
     def __call__(self, X):
-        preaugmentation_percs = self.preaugmentation_percs
-        if preaugmentation_percs[0] > 0:
-            print('X_shape',X.shape,X[0].shape)
-            #@LOUIS APPLY PREAUGMENTATION #1 TO SPIKES (each element of X) HERE
-        if preaugmentation_percs[1] > 0:
-            print('X_shape',X.shape,X[0].shape)
-            #@LOUIS APPLY PREAUGMENTATION #2 TO SPIKES (each element of X) HERE            
-            
         X_isi = np.zeros((X.shape[0], self.num_bins))
-        if self.adaptive == True:
-            X = [np.clip(np.diff(x), a_min=self.min_isi, a_max=self.max_isi) for x in X]
-            min_X = min([np.min(x) for x in X if len(x)>0])
-            max_X = max([np.max(x) for x in X if len(x)>0])
-            X_vals = np.hstack(X)
-            percs = np.linspace(0,1,self.num_bins+1)
-            adaptive_bins = np.percentile(X_vals,percs)
-            self.bins = adaptive_bins
-            for i, x in enumerate(X):
-                X_isi[i] = np.histogram(x, self.bins)[0].astype(int)
-        else:
-            for i, x in enumerate(X):
-                # compute isi
-                x = np.diff(x)
-                # compute histogram
-                x = np.clip(x, a_min=self.min_isi, a_max=self.max_isi)
-                if self.log == True:
-                    x = np.log10(x)
-                X_isi[i] = np.histogram(x, self.bins)[0].astype(int)
-        augmentation_percs = self.augmentation_percs
-        if augmentation_percs[0] > 0:
-            X_isi = add_random_noise(X_isi,augmentation_percs[0])
-        if augmentation_percs[1] > 0:
-            X_isi = moving_average(X_isi,augmentation_percs[1])
-                   
+        for i, x in enumerate(X):
+            # compute isi
+            x = np.diff(x)
+
+            # compute histogram
+            x = np.clip(x, a_min=self.min_isi, a_max=self.max_isi)
+            X_isi[i] = np.histogram(x, self.bins)[0].astype(int)
         return X_isi
 
 
@@ -422,7 +362,6 @@ class ConcatFeats:
 
 
 if __name__ == '__main__':
-    #NOTE: THIS ISN'T MEANT TO BE USED, JUST AN EXAMPLE OF THE FLOW
     dataset = Dataset('./data')
 
     aggr_dict = {'e23Cux2': 'e23', 'i5Sst': 'i5Sst', 'i5Htr3a': 'i5Htr3a', 'e4Scnn1a': 'e4', 'e4Rorb': 'e4',
