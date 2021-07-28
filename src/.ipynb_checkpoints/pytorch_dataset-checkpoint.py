@@ -1,27 +1,15 @@
 from abc import ABC, abstractmethod
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
 import inspect
-=======
->>>>>>> f9ab615a68d5db21de32b39bea33d3a321c2fa0c
->>>>>>> 2876c5bd505d4ec023b7f7d4fabfc5e309b07892
 import torch
 from torch.utils.data import Dataset
 import numpy as np
 import sklearn
 
 from src.covariance import compute_cov, compute_edge_dist
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
 from src.isi import compute_isi_dist
 from src.fr import compute_fr_dist
 
-=======
->>>>>>> f9ab615a68d5db21de32b39bea33d3a321c2fa0c
->>>>>>> 2876c5bd505d4ec023b7f7d4fabfc5e309b07892
 
 
 class PyTorchDataset(Dataset, ABC):
@@ -80,9 +68,6 @@ class EdgeDistributionDataset(PyTorchDataset):
         edge_dist = compute_edge_dist(cov, num_bins=self.num_bins)  # matrix of shape (num_cells, num_bins)
         return edge_dist, y
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
 class FRDistributionDataset(PyTorchDataset):
     def __init__(self, master_dataset, scaler=sklearn.preprocessing.StandardScaler,
                  bins=200, **kwargs):
@@ -197,22 +182,3 @@ class ISIFRDistributionDataset(PyTorchDataset):
         return isifr_dist, y
         '''
     
-=======
->>>>>>> 2876c5bd505d4ec023b7f7d4fabfc5e309b07892
-
-class ISIDistributionDataset(PyTorchDataset):
-    def __init__(self, master_dataset, scaler=sklearn.preprocessing.StandardScaler,
-                 edge_dist_num_bins=10, **kwargs):
-        super().__init__(master_dataset, **kwargs)
-
-        assert 'transform' not in self.kwargs or self.kwargs['transform'] == 'interspike_interval'
-        self.kwargs['transform'] = 'interspike_interval'
-
-    def __getitem__(self, idx):
-        trial_id = self.trials[idx]
-        X, y, m = self.master_dataset.sample(**self.kwargs, trial_id=trial_id)
-        raise NotImplementedError
-<<<<<<< HEAD
-=======
->>>>>>> f9ab615a68d5db21de32b39bea33d3a321c2fa0c
->>>>>>> 2876c5bd505d4ec023b7f7d4fabfc5e309b07892

@@ -18,10 +18,22 @@ def compute_cov(x, scaler=None):
     return np.cov(x)
 
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+def compute_edge_dist(cov, num_bins=10, vmin=0, vmax=1.):
+    bins = np.linspace(vmin, vmax, num_bins+1)
+    return np.apply_along_axis(lambda a: np.histogram(a, bins=bins)[0], 1, cov)
+=======
+>>>>>>> 2876c5bd505d4ec023b7f7d4fabfc5e309b07892
 def compute_edge_dist(cov, num_bins=10, vmin=-1, vmax=1.):
 
     bins = np.linspace(vmin, vmax, num_bins+1)
     return np.apply_along_axis(lambda a: np.histogram(np.clip(a, vmin, vmax), bins=bins, density=True)[0], 1, cov)
+<<<<<<< HEAD
+=======
+>>>>>>> f9ab615a68d5db21de32b39bea33d3a321c2fa0c
+>>>>>>> 2876c5bd505d4ec023b7f7d4fabfc5e309b07892
 
 
 def sliding_cov(x, window_size, scaler=None, cov_op=compute_cov):
