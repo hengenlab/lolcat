@@ -2,6 +2,7 @@ from torch.nn import AvgPool1d
 from torch import tensor
 import numpy as np
 
+
 def add_random_noise(x, sigma=0.1):
     noisy_x = []
     for hist in x:
@@ -9,6 +10,7 @@ def add_random_noise(x, sigma=0.1):
         noisy_hist = np.asarray([xi*np.random.normal(1,sigma) for xi in hist])
         noisy_x.append(noisy_hist)
     return noisy_x
+
 
 def moving_average(x, kernel_width=3,padding=1):
     averaged_x = []
@@ -18,11 +20,13 @@ def moving_average(x, kernel_width=3,padding=1):
         averaged_hist = m(tensor([[hist]])).numpy()[0,0,:]
         averaged_x.append(averaged_hist)
     return averaged_x
-        
+
+
 def sliding_windows(window_size, max_time, step):
     ''' Creates overlapping windows '''
     return (np.expand_dims([0,window_size], 0) \
                 + np.expand_dims(np.arange(max_time, step=step), 0).T)
+
 
 def slice_data(X, y, window_size):
     ''' Slices spike trains into chunks whose size is a percentage (slice_perc) of the
@@ -43,7 +47,6 @@ def slice_data(X, y, window_size):
     return new_X, new_y
 
 
-
 def slice_data_old(X, y, slice_perc):
     ''' Slices spike trains into chunks whose size is a percentage (slice_perc) of the
     sample's length '''
@@ -60,6 +63,3 @@ def slice_data_old(X, y, slice_perc):
             augmented_X.append(sample[start:end])
             augmented_y.append(label)
     return augmented_X, augmented_y
-
-
-   

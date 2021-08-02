@@ -57,3 +57,37 @@ class MLP(nn.Module):
         for name, module in self.named_modules():
             hooks[name] = module.register_forward_hook(self.get_activation(name))
         return hooks
+
+
+class BlockMLP(nn.Module):
+    def __init__(self, input_dims, n_hiddens, n_class, dropout_p=0.2):
+        super().__init__()
+        assert isinstance(input_dims, int), 'Please provide int for input_dims'
+        self.input_dims = input_dims
+        self.n_hiddens = n_hiddens
+        self.n_class = n_class
+        self.dropout_p = dropout_p
+
+        current_dims = input_dims
+        layers = OrderedDict()
+
+        if isinstance(n_hiddens, int):
+            n_hiddens = [n_hiddens]
+        else:
+            n_hiddens = list(n_hiddens)
+        for i, n_hidden in enumerate(n_hiddens):
+            layers['fc{}'.format(i+1)] = nn.Linear(current_dims, n_hidden)
+            layers['relu{}'.format(i+1)] = nn.ReLU()
+            if dropout_p > 0.:
+                layers['drop{}'.format(i+1)] = nn.Dropout(dropout_p)
+            current_dims = n_hidden
+        layers['out'] = nn.Linear(current_dims, n_class)
+
+        self.model = nn.Sequential(layers)
+
+    def forward(self, input):
+        r"""Inputs can be 2d images"""
+        input = input.view(input.size(0), -1)
+        assert input.size(1) == self.input_dims
+        output = self.model.forward(input)
+        return nn.functional.log_softmax(output, dim=1)
