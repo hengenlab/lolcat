@@ -1,7 +1,0 @@
-hp_idx	k	distribution	cell_split_seed	bin_size	isi_dist_bins_start	isi_dist_bins_stop	isi_dist_bins_step	fr_dist_bins_start	fr_dist_bins_stop	fr_dist_bins_step	lr	n_hiddens	dropout_p	weight_decay	augmentation_perc1	augmentation_perc2	preaugmentation_perc1	preaugmentation_perc2
-1	17celltypes	ISI	1234	0.2	0	0.4	0.0005	0	51	1	0.0001	600,300,150,75,38	0	0	1	0	0	0
-2	17celltypes	ISI	1234	0.2	0	0.4	0.0005	0	51	1	0.0001	600,300,225,150,75,38	0	0	0	1	0	0
-3	17celltypes	ISI	1234	0.2	0	0.4	0.0005	0	51	1	0.0001	600,600,300,300,150,150,75,75,38,38	0	0	1	1	0	0
-4	17celltypes	ISI	1234	0.2	0	0.4	0.0005	0	51	1	0.0001	600,300,150,75,38	0	0	0	0	1	0
-5	17celltypes	ISI	1234	0.2	0	0.4	0.0005	0	51	1	0.0001	600,300,225,150,75,38	0	0	0	0	0	1
-6	17celltypes	ISI	1234	0.2	0	0.4	0.0005	0	51	1	0.0001	600,600,300,300,150,150,75,75,38,38	0	0	0	0	1	1
