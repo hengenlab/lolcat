@@ -95,7 +95,7 @@ class Dataset:
     num_trials = 100
     raw_dir = 'raw/'
     processed_dir = 'processed/'
-    processed_file = 'v1_dataset.pkl'
+    processed_file = 'neuropixels_dataset.pkl'
 
     def __init__(self, root_dir, data_source='v1', force_process=False, labels_col='pop_name'):
         self.root_dir = root_dir
@@ -145,9 +145,7 @@ class Dataset:
     def _load_cell_metadata(self):
         CELL_METADATA_FILENAME = {
             'v1': 'v1_nodes.csv',
-            'neuropixels_celltypes': 'neuropixels_celltypes_nodes.csv',
-            'neuropixels_regions': 'neuropixels_regions_nodes.csv',
-            'neuropixels_structures': 'neuropixels_structures_nodes.csv',
+            'neuropixels': 'neuropixels_nodes.csv',
             'calcium': 'calcium_nodes.csv',
         }
 
@@ -156,7 +154,7 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        df = pd.read_csv(filename, sep=' ')
+        df = pd.read_csv(filename, sep=',')
 
         # Get rid of the LIF neurons, keeping only biophysically realistic ones
         if (self.data_source == 'v1') & (self.labels_col == 'pop_name'):
@@ -173,10 +171,8 @@ class Dataset:
     def _load_spike_data(self):
         SPIKE_FILENAME = {
             'v1': 'spikes.csv',
-            'neuropixels_celltypes': 'neuropixels_spikes.csv',
-            'neuropixels_regions': 'neuropixels_spikes.csv',
-            'neuropixels_structures': 'neuropixels_spikes.csv',
-            'calcium': 'calcium_spikes.csv',
+            'neuropixels': 'neuropixels_spikes.csv',
+            'calcium': 'calcium_spikes.csv'
         }
 
         try:
@@ -184,7 +180,7 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        df = pd.read_csv(filename, sep=' ', usecols=['timestamps', 'node_ids'])  # only load the necessary columns
+        df = pd.read_csv(filename, sep=',', usecols=['timestamps', 'node_ids'])  # only load the necessary columns
         df.timestamps = df.timestamps / 1000  # convert to seconds
 
         # perform inner join
@@ -192,6 +188,7 @@ class Dataset:
         df = df.merge(cell_series, how='right', on='node_ids')  # do a one-to-many mapping so that cells that are not
         # needed are filtered out and that cells that do not
         # fire have associated nan row.
+        df = df.sort_values(by=['node_ids'])
         assert df.node_ids.is_monotonic  # verify that nodes are sorted
         spiketimes = df.groupby(['node_ids'])['timestamps'].apply(np.array).to_numpy()  # group spike times for each
         # cell and create an array.
@@ -202,7 +199,6 @@ class Dataset:
 
         if self.data_source == 'calcium' or self.data_source.startswith('neuropixels'):
             print('({}) trial data not yet implemented. Using V1 trial data.'.format(self.data_source))
-
         df = pd.read_csv(filename, engine='python', sep='  ', skiprows=12, usecols=[3], names=['filename'])
         assert len(df) == self.num_trials
 
