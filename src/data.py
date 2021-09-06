@@ -96,7 +96,7 @@ class Dataset:
             df = df[~df['pop_name'].str.startswith('LIF')]
 
         # sort cells by id
-        df.sort_index()
+        df.sort_index(inplace=True)
 
         # Get cell ids
         cell_ids = df.index.to_numpy()
