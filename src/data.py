@@ -22,7 +22,7 @@ class Dataset:
 
     @property
     def processed_file(self):
-        return '{}_dataset.pkl'.format(self.data_source)
+        return '{}_dataset-labels_{}.pkl'.format(self.data_source, self.labels_col)
 
     @property
     def csv_sep(self):
@@ -99,7 +99,7 @@ class Dataset:
         df.sort_index()
 
         # Get cell ids
-        cell_ids = df.id.to_numpy()
+        cell_ids = df.index.to_numpy()
 
         # Get cell types
         cell_type_ids, cell_type_labels = pd.factorize(df[self.labels_col])  # get unique values and reverse lookup table
