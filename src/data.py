@@ -1,91 +1,13 @@
 import os
-import re
 import pickle
+import re
 from collections import OrderedDict
-from functools import wraps
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from torch.nn import AvgPool1d
-from torch import tensor
-import numpy as np
 
-
-def add_random_noise(x, augmentation_perc=1, sigma=0.1):
-    r"""Add/subtract a random amount of gaussian noise (sigma=std. dev.) to a subset (augmentation_perc=prob. to affect a bin) of histogram bins"""
-    add_noise = lambda hist: np.multiply(hist, np.random.normal(1, sigma, hist.size))
-    noisy_x = np.apply_along_axis(add_noise, 1, x)
-    draws = np.where(np.random.uniform(0, 1, noisy_x.shape[1]) > augmentation_perc)[0]
-    noisy_x[draws, :] = x[draws, :]
-    return noisy_x
-
-
-def moving_average(x, augmentation_perc=1, kernel_width=3):
-    r"""Rolling (kernel_width is diameter not radius) average of a subset (augmentation_perc=prob. to affect a bin) of histogram bins"""
-    assert kernel_width % 2 == 1
-    padding = kernel_width // 2
-    average = lambda hist: np.convolve(hist, np.ones(kernel_width) / kernel_width, mode='same')
-    averaged_x = np.apply_along_axis(average, 1, x)
-    draws = np.where(np.random.uniform(0, 1, averaged_x.shape[1]) > augmentation_perc)[0]
-    averaged_x[draws, :] = x[draws, :]
-    return averaged_x
-
-# @LOUIS CODE AUGMENTATIONS TO SPIKES HERE
-def crop_spike_train(spike_train, crop_perc):
-    window_size = int(crop_perc * len(spike_train))
-    start = np.random.uniform(0, window_size - 1)
-    stop = start + window_size
-    return spike_train[start, stop]
-
-
-def pad_jagged(matrix):
-    ''' Pad a jagged matrix '''
-    maxlen = max(len(row) for row in matrix)
-
-    padded_matrix = np.zeros((len(matrix), maxlen))
-    for i, row in enumerate(matrix):
-        padded_matrix[i, :len(row)] += row
-    return padded_matrix
-
-
-def crop_data(x, augmentation_perc=1, crop_perc=0.5):
-    r'''Crop a subset (augmentation_perc=prob. to affect a spike train) of spike trains, taking a window of size crop_perc * len(spike_train)'''
-    cropped_x = np.apply_along_axis(crop_spike_train, 1, x, crop_perc=crop_perc)
-    draws = np.where(np.random.uniform(0, 1, cropped_x.shape[1]) > augmentation_perc)[0]
-    cropped_x[draws, :] = x[draws, :]
-    return cropped_x
-
-
-def run_once_property(fn):
-    r"""Run fn once, when called the first time and then keep the result in memory."""
-
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        try:
-            instance = getattr(self, '_' + fn.__name__)
-            return instance
-        except AttributeError:
-            instance = fn(self, *args, **kwargs)
-            setattr(self, '_' + fn.__name__, instance)
-            return instance
-
-    return property(wrapper)
-
-
-def requires(*attrs, error_msg=''):
-    r"""If attrs aren't defined, raises error."""
-
-    def decorator(fn):
-        @wraps(fn)
-        def wrapper(self, *args, **kwargs):
-            if any((not hasattr(self, attr) for attr in attrs)):
-                raise ValueError(error_msg)
-            return fn(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
+from utils import requires
 
 
 class Dataset:
@@ -95,7 +17,18 @@ class Dataset:
     num_trials = 100
     raw_dir = 'raw/'
     processed_dir = 'processed/'
-    processed_file = 'neuropixels_dataset.pkl'
+
+    @property
+    def processed_file(self):
+        return '{}_dataset.pkl'.format(self.data_source)
+
+    @property
+    def csv_sep(self):
+        if self.data_source == 'v1':
+            sep = ' '
+        else:
+            sep = ','
+        return sep
 
     def __init__(self, root_dir, data_source='v1', force_process=False, labels_col='pop_name'):
         self.root_dir = root_dir
@@ -154,7 +87,7 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        df = pd.read_csv(filename, sep=',')
+        df = pd.read_csv(filename, sep=self.csv_sep)
 
         # Get rid of the LIF neurons, keeping only biophysically realistic ones
         if (self.data_source == 'v1') & (self.labels_col == 'pop_name'):
@@ -180,7 +113,7 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        df = pd.read_csv(filename, sep=',', usecols=['timestamps', 'node_ids'])  # only load the necessary columns
+        df = pd.read_csv(filename, sep=self.csv_sep, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
         df.timestamps = df.timestamps / 1000  # convert to seconds
 
         # perform inner join
