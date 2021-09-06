@@ -12,6 +12,8 @@ from .utils import requires
 
 class Dataset:
     r"""
+    v1: pop_name
+    neuropixels: brain_region, brain_structure
     """
     trial_length = 3  # in seconds
     num_trials = 100
@@ -87,12 +89,14 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        df = pd.read_csv(filename, sep=self.csv_sep)
+        df = pd.read_csv(filename, sep=self.csv_sep, index_col='id')
 
         # Get rid of the LIF neurons, keeping only biophysically realistic ones
         if (self.data_source == 'v1') & (self.labels_col == 'pop_name'):
             df = df[~df['pop_name'].str.startswith('LIF')]
-            df.sort_index()
+
+        # sort cells by id
+        df.sort_index()
 
         # Get cell ids
         cell_ids = df.id.to_numpy()
@@ -121,7 +125,6 @@ class Dataset:
         df = df.merge(cell_series, how='right', on='node_ids')  # do a one-to-many mapping so that cells that are not
         # needed are filtered out and that cells that do not
         # fire have associated nan row.
-        df = df.sort_values(by=['node_ids'])
         assert df.node_ids.is_monotonic  # verify that nodes are sorted
         spiketimes = df.groupby(['node_ids'])['timestamps'].apply(np.array).to_numpy()  # group spike times for each
         # cell and create an array.
