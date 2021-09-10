@@ -271,7 +271,7 @@ class Dataset:
         # get cells in cell_mode
         cell_ids = self._cell_split[cell_mode]
 
-        X, y = [], []
+        X, cell_index = [], []
 
         # iterate over trials and collect features
         trial_iterator = self._trial_split[time_mode]
@@ -285,48 +285,10 @@ class Dataset:
 
             # select data
             X.append(self._select_data(cell_ids, start_time, end_time) - start_time)
-            y.append(self.cell_type_ids[cell_ids])
+            cell_index.append(np.arange(len(cell_ids)))
 
-        X = np.concatenate(X)
-        y = np.concatenate(y)
+        X = np.concatenate(X)   # (num_cells, data)
+        cell_index = np.concatenate(cell_index)
+        y = self.cell_type_ids[cell_ids]
 
-        return X, y
-
-
-if __name__ == '__main__':
-    # NOTE: THIS ISN'T MEANT TO BE USED, JUST AN EXAMPLE OF THE FLOW
-    dataset = Dataset('./data')
-
-    aggr_dict = {'e23Cux2': 'e23', 'i5Sst': 'i5Sst', 'i5Htr3a': 'i5Htr3a', 'e4Scnn1a': 'e4', 'e4Rorb': 'e4',
-                 'e4other': 'e4', 'e4Nr5a1': 'e4', 'i6Htr3a': 'i6Htr3a', 'i6Sst': 'i6Sst', 'e6Ntsr1': 'e6',
-                 'i23Pvalb': 'i23Pvalb', 'i23Htr3a': 'i23Htr3a', 'i1Htr3a': 'i1Htr3a', 'i4Sst': 'i4Sst', 'e5Rbp4': 'e5',
-                 'e5noRbp4': 'e5', 'i23Sst': 'i23Sst', 'i4Htr3a': 'i4Htr3a', 'i6Pvalb': 'i6Pvalb', 'i5Pvalb': 'i5Pvalb',
-                 'i4Pvalb': 'i4Pvalb'}
-
-    print('Before aggregation: Number of cell types -', dataset.num_cell_types)
-    dataset.aggregate_cell_classes(aggr_dict)
-
-    print('After aggregation: Number of cell types -', dataset.num_cell_types)
-
-    dataset.drop_dead_cells()
-    dataset.split_cell_train_val_test(test_size=0.8, val_size=0.1)
-    dataset.split_trial_train_val_test(test_size=0.8, val_size=0.1)
-
-    fr_transform = FiringRates(window_size=3, bin_size=0.5)
-    isi_transform = ISIDistribution(bins=10, min_isi=0, max_isi=0.4)
-    fr_isi_transform = ConcatFeats(fr_transform, isi_transform)
-
-    X_train, y_train = dataset.get_set('train', transform=fr_isi_transform)
-
-    # drop rows for which cell is not very active
-    mask = X_train[:, :6].sum(axis=1) > threshold
-    X_train, y_train = X_train[mask], y_train[mask]
-
-    X_train = torch.FloatTensor(X_train)
-    y_train = torch.LongTensor(y_train)
-    train_dataset = TensorDataset(X_train, y_train)
-
-    # sampler = # https://discuss.pytorch.org/t/how-to-handle-imbalanced-classes/11264/2
-    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True, sampler=sampler)
-
-    X_val, y_val = dataset.get_set('val', transform=fr_isi_transform)  # do not use accuracy, use F1-score
+        return [X, y, cell_index]
