@@ -16,7 +16,7 @@ class Dataset:
     neuropixels: brain_region, brain_structure
     """
     trial_length = 3  # in seconds
-    num_trials = 100
+    #num_trials = 100
     raw_dir = 'raw/'
     processed_dir = 'processed/'
 
@@ -27,7 +27,7 @@ class Dataset:
     @property
     def csv_sep(self):
         if self.data_source == 'v1':
-            sep = ' '
+            sep = ','
         else:
             sep = ','
         return sep
@@ -36,7 +36,14 @@ class Dataset:
         self.root_dir = root_dir
         self.data_source = data_source
         self.labels_col = labels_col
-
+        
+        if self.data_source == 'v1':
+            self.num_trials = 100
+        elif self.data_source == 'neuropixels':
+            self.num_trials = 600
+        elif self.data_source == 'calcium':
+            self.num_trials = 600
+            
         # check if already processed
         already_processed, filename = self._look_for_processed_file()
 
@@ -88,9 +95,10 @@ class Dataset:
             filename = os.path.join(self.root_dir, self.raw_dir, CELL_METADATA_FILENAME[self.data_source])
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
-
+        
+        
         df = pd.read_csv(filename, sep=self.csv_sep, index_col='id')
-
+        
         # Get rid of the LIF neurons, keeping only biophysically realistic ones
         if (self.data_source == 'v1') & (self.labels_col == 'pop_name'):
             df = df[~df['pop_name'].str.startswith('LIF')]
@@ -107,7 +115,7 @@ class Dataset:
 
     def _load_spike_data(self):
         SPIKE_FILENAME = {
-            'v1': 'spikes.csv',
+            'v1': 'v1_spikes.csv',
             'neuropixels': 'neuropixels_spikes.csv',
             'calcium': 'calcium_spikes.csv'
         }
@@ -131,10 +139,15 @@ class Dataset:
         return spiketimes
 
     def _load_trial_data(self):
-        filename = os.path.join(self.root_dir, self.raw_dir, 'gratings_order.txt')
+        GRATINGS_FILENAME = {
+            'v1':'v1_gratings_order.txt',
+            'neuropixels':'neuropixels_gratings_order.txt',
+            'calcium':'calcium_gratings_order.txt'
+        }
+        filename = os.path.join(self.root_dir, self.raw_dir, GRATINGS_FILENAME[self.data_source])
 
         if self.data_source == 'calcium' or self.data_source.startswith('neuropixels'):
-            print('({}) trial data not yet implemented. Using V1 trial data.'.format(self.data_source))
+            print('({}) trial data not yet fully vetted. Going ahead...'.format(self.data_source))
         df = pd.read_csv(filename, engine='python', sep='  ', skiprows=12, usecols=[3], names=['filename'])
         assert len(df) == self.num_trials
 
@@ -260,7 +273,8 @@ class Dataset:
             cell_spike_times = cell_spike_times[(start_time <= cell_spike_times) & (cell_spike_times <= end_time)]
             cell_spike_times = np.sort(cell_spike_times)
             X.append(cell_spike_times)
-        X = np.array(X)
+        
+        X = np.array(X,dtype='object')
         return X
 
     @requires('_cell_split', '_trial_split', error_msg='Split dataset first.')
@@ -286,7 +300,11 @@ class Dataset:
             # select data
             X.append(self._select_data(cell_ids, start_time, end_time) - start_time)
             cell_index.append(np.arange(len(cell_ids)))
-
+        #print([(idx,x,x.shape) for idx,x in enumerate(X) if len(x.shape) == 2])
+        #print(trial_iterator[0],trial_iterator[1],trial_iterator[57],trial_iterator[58],trial_iterator[59])
+        #print([(idx,x.shape) for idx,x in enumerate(X)])
+        #print(len(cell_ids))
+        X = [x if len(x.shape)==1 else np.ndarray.flatten(np.asarray([np.array([0])]*len(cell_ids))) for x in X]
         X = np.concatenate(X)   # (num_cells, data)
         cell_index = np.concatenate(cell_index)
         y = self.cell_type_ids[cell_ids]

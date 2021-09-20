@@ -8,15 +8,20 @@ import pandas as pd
 CELL_METADATA_FILENAME = {
     'v1': 'v1_nodes.csv',
     'neuropixels': 'neuropixels_nodes.csv',
-    'calcium': 'calcium_nodes.csv',
+    'calcium': 'calcium_nodes.csv'
 }
 
 SPIKE_FILENAME = {
     'v1': 'v1_spikes.csv',
-    'neuropixels': 'neuropixels_spikes.csv',
-    'calcium': 'calcium_spikes.csv',
+    'neuropixels': 'neuropixels_all_spikes.csv',
+    'calcium': 'calcium_all_spikes.csv'
 }
 
+GRATINGS_FILENAME = {
+	'v1':'v1_gratings_order.txt',
+	'neuropixels':'neuropixels_gratings_order.txt',
+	'calcium':'calcium_gratings_order.txt'
+}
 
 def load_cell_metadata(root, *, data_source='v1', labels_col='pop_name'):
     try:
@@ -60,10 +65,10 @@ def load_spike_data(root, *, data_source='v1', cell_ids):
 
 
 def load_trial_data(root, *, data_source='v1',):
-    filename = os.path.join(root, 'gratings_order.txt')
+    filename = os.path.join(root, GRATINGS_FILENAME[data_source])
 
     if data_source == 'calcium' or data_source.startswith('neuropixels'):
-        print('({}) trial data not yet implemented. Using V1 trial data.'.format(data_source))
+        print('({}) trial data not yet fully tested. Giving it a try...'.format(data_source))
 
     df = pd.read_csv(filename, engine='python', sep='  ', skiprows=12, usecols=[3], names=['filename'])
 
