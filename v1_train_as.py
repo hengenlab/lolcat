@@ -73,10 +73,12 @@ def test(model, loader, writer, tag, epoch, device, class_names=None):
     return f1
 
 def task_class(task): #select the right class for the task
-    task_class_dict = {'v1':V1CellSets,
+    task_class_dict = {'v1_celltypes_17':V1Types17CellSets,
                        'v1_celltypes_13':V1Types13CellSets,
                        'v1_celltypes_11':V1Types11CellSets,
                        'v1_celltypes_4':V1Types4CellSets,
+                       'v1_layers_5':V1Layers5CellSets,
+                       'v1_celltypes_2':V1Types2CellSets,
                        'neuropixels_brain_region_4':NeuropixelsBrainRegion4CellSets,
                       'neuropixels_brain_structure_29': NeuropixelsBrainStructure29CellSets,
                       'neuropixels_subclass_3':NeuropixelsSubclass3CellSets,
@@ -150,8 +152,9 @@ def run(config, root, task, eval_batch_size=512, logdir=None):
 
 def main():
     data_root = os.path.join(os.getcwd(), 'data/')  # path to data
-    logdir = './runs/neuropixels_subclass_4'
-    task = 'neuropixels_subclass_4'
+    logdir = './runs/v1_layers_5'
+    task = 'v1_layers_5'
+    print(task)
     config = {
         "trial_dropout": 0.2,
         "split_seed": 1,

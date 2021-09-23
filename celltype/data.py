@@ -118,12 +118,12 @@ def compute_log_isi_distribution(X, num_bins=128, a_min=-2.5, a_max=0.5):
 
 
 ### V1 Dataset
-class V1CellSets(CellSets):
+class V1Types17CellSets(CellSets):
     def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
         super().__init__('v1', root, split, random_seed, num_bins, force_process, transform)
 
     def get_data(self, test_size=0.2, val_size=0.2):
-        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='pop_name', force_process=False)
+        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='17celltypes', force_process=False)
 
         # each sample must have at least 30 spikes
         dataset.drop_dead_cells(cutoff=30)
@@ -144,7 +144,7 @@ class V1CellSets(CellSets):
         # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
         _, class_sample_count = torch.unique(self.target, return_counts=True)
         increase_factor = torch.floor(torch.pow(1.5, torch.floor(9 - torch.log(class_sample_count))))
-        print(increase_factor)
+        #increase_factor = tensor([1., 1., 2., 1., 3., 3., 2., 1., 3., 2., 3., 3., 2., 3., 2., 2., 1.])
         indices = []
         for cell_type, factor in enumerate(increase_factor.cpu()):
             cell_indices = torch.where(self.target == cell_type)[0]
@@ -153,7 +153,176 @@ class V1CellSets(CellSets):
         indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
         return SubsetRandomSampler(indices)
 
+class V1Types13CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('v1_celltypes_13', root, split, random_seed, num_bins, force_process, transform)
 
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='13celltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        dataset.drop_dead_cells(cutoff=30)
+
+        # cell classes identified by Louis as not being too quiet
+        keepers = ['e23', 'e6', 'i5Htr3a', 'i6Pvalb', 'i5Pvalb', 'i6Sst', 'i4Htr3a', 'i23Htr3a', 'e4', 'i1Htr3a', 'i4Sst', 'e5', 'i23Sst', 'i4Pvalb', 'i5Sst', 'i6Htr3a', 'i23Pvalb']
+        dataset.drop_other_classes(classes_to_keep=keepers)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, keepers
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(9 - torch.log(class_sample_count))))
+        #increase_factor = tensor([1., 1., 2., 1., 3., 3., 3., 2., 3., 3., 3., 2., 1.])
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices)    
+    
+class V1Types11CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('v1_celltypes_11', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='11celltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        dataset.drop_dead_cells(cutoff=30)
+
+        # cell classes identified by Louis as not being too quiet
+        keepers = ['Rorb', 'Rbp4', 'noRbp4', 'other', 'Ntsr1', 'Scnn1a', 'Pvalb', 'Cux2', 'Htr3a', 'Sst', 'Nr5a1']
+        dataset.drop_other_classes(classes_to_keep=keepers)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, keepers
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(9 - torch.log(class_sample_count))))
+        #increase_factor = tensor([1., 1., 1., 1., 2., 2., 1., 2., 2., 2., 1.])
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices)
+    
+class V1Types4CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('v1_celltypes_4', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='4celltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        dataset.drop_dead_cells(cutoff=30)
+
+        # cell classes identified by Louis as not being too quiet
+        keepers = ['Pvalb', 'Sst', 'e', 'Htr3a']
+        dataset.drop_other_classes(classes_to_keep=keepers)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, keepers
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(10 - torch.log(class_sample_count))))
+        #increase_factor=tensor([1., 2., 3., 3.])
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices)
+
+# todo adapt to task/ dataset
+class V1Layers5CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('v1_layers_5', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='5layers', force_process=False)
+
+        # each sample must have at least 30 spikes
+        dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['5', '23', '4', '1', '6']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(9 - torch.log(class_sample_count))))
+        print(increase_factor)
+        #increase_factor = 
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices)    
+    
+# todo adapt to task/ dataset
+class V1Types2CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('v1_celltypes_2', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='v1', labels_col='2celltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['e','i']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(11 - torch.log(class_sample_count))))
+        #increase_factor = tensor([1., 2.])
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices)        
+    
 # todo adapt to task/ dataset
 class NeuropixelsBrainRegion4CellSets(CellSets):
     def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
