@@ -1,7 +1,7 @@
 import os
 import pickle
 import re
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 import numpy as np
 import pandas as pd
@@ -271,7 +271,7 @@ class Dataset:
         # get cells in cell_mode
         cell_ids = self._cell_split[cell_mode]
 
-        X, cell_index = [], []
+        data = defaultdict(list)
 
         # iterate over trials and collect features
         trial_iterator = self._trial_split[time_mode]
@@ -284,11 +284,18 @@ class Dataset:
             end_time = start_time + (self.trial_length * num_trials_in_window)
 
             # select data
-            X.append(self._select_data(cell_ids, start_time, end_time) - start_time)
-            cell_index.append(np.arange(len(cell_ids)))
+            data['X'].append(self._select_data(cell_ids, start_time, end_time) - start_time)
+            data['cell_index'].append(np.arange(len(cell_ids)))
 
-        X = np.concatenate(X)   # (num_cells, data)
-        cell_index = np.concatenate(cell_index)
-        y = self.cell_type_ids[cell_ids]
+        # concatenate
+        for feature_name, feature_data in data.items():
+            data[feature_name] = np.concatenate(feature_data)   # (num_cells, data)
 
-        return [X, y, cell_index]
+        data = dict(data)
+        data['cell_type'] = self.cell_type_ids[cell_ids]
+
+        data['trial_metadata'] = {}
+        for feature_name, feature_data in self.trial_table.iteritems():
+            data['trial_metadata'][feature_name] = np.array(feature_data)
+
+        return data

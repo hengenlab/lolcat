@@ -6,19 +6,20 @@ sys.path.append('./')
 import numpy as np
 import torch
 import torch.optim as optim
+from functools import partial
 
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import DataLoader
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_mean_pool, global_max_pool, global_sort_pool, Set2Set, global_add_pool
 from tqdm import tqdm
 
 from celltype.data import V1CellSets
-from celltype.models import GlobalPoolingModel, MLP
+from celltype.models import GlobalPoolingModel, MLP, GlobalAttention, MultiHeadPooling
+from celltype.block_lin import BlockMLP
 from celltype.transforms import Dropout
-from celltype.visualization import plot_confusion_matrix
-
+from celltype.visualization import plot_confusion_matrix, generate_fingerprint
 
 
 def train(model, train_loader, criterion, optimizer, writer, current_step):
@@ -26,6 +27,7 @@ def train(model, train_loader, criterion, optimizer, writer, current_step):
 
     for data in train_loader:
         x, batch, target = data.x, data.batch, data.y
+        batch = batch.to(x.device)
         optimizer.zero_grad()
         output = model(x, batch)
         loss = criterion(output, target)
@@ -43,9 +45,10 @@ def test(model, loader, writer, tag, epoch, class_names=None):
 
     predictions = []
     targets = []
-    with torch.no_grad():
+    with torch.inference_mode():
         for data in loader:
             x, batch, target = data.x, data.batch, data.y
+            batch = batch.to(x.device)
             output = model(x, batch)
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             pred = np.ndarray.flatten(pred.cpu().numpy())
@@ -69,6 +72,54 @@ def test(model, loader, writer, tag, epoch, class_names=None):
     fig = plot_confusion_matrix(cm, class_names=class_names)
     writer.add_figure('{}/confusion_matrix'.format(tag), fig, epoch)
     return f1
+
+def visualize(model, loader, writer, tag, epoch, class_names):
+    model.eval()
+
+    embeddings = []
+    global_embeddings = []
+    images = []
+    metadata = []
+    global_metadata = []
+    cum_sum = 0
+    global_cum_sum = 0
+
+    with torch.inference_mode():
+        for data in loader:
+            x, batch, target = data.x, data.batch, data.y
+            batch = batch.to(x.device)
+
+            output, emb, global_emb = model(x, batch, return_trial_embeddings=True)
+            embeddings.append(emb.detach().cpu().numpy())
+            global_embeddings.append(global_emb.detach().cpu().numpy())
+            # images.append(generate_fingerprint(x.cpu().numpy()))
+
+            cell_id = cum_sum + batch.cpu().numpy()
+            cell_type_global = np.array(class_names)[target.cpu().numpy()]
+            cell_type = np.repeat(cell_type_global, 100)
+            orientation = data.orientation.cpu().numpy()
+            trial_md = data.trial.cpu().numpy()
+            fr = torch.log10(1 + x.sum(axis=1)).cpu().numpy()
+            sparsity = global_add_pool((x.sum(axis=1) == 0).float(), batch) / 100
+            sparsity = sparsity.cpu().numpy()
+            # combine metadata
+            metadata.append(np.column_stack([orientation, trial_md, cell_id, cell_type, fr]))
+            global_metadata.append(np.column_stack([cell_type_global, sparsity]))
+
+            cum_sum += batch.size(0)
+            global_cum_sum = global_cum_sum + data.num_graphs
+
+    metadata_header = ['orientation', 'trial_md', 'cell_id', 'cell_type', 'firing_rate']
+    embeddings = np.row_stack(embeddings)
+    global_embeddings = np.row_stack(global_embeddings)
+    # images = torch.from_numpy(np.row_stack(images))
+    metadata = np.row_stack(metadata).tolist()
+    global_metadata = np.column_stack([np.row_stack(global_metadata), np.arange(global_cum_sum)]).tolist()
+
+    writer.add_embedding(embeddings, metadata=metadata, tag='trial_embedding',
+                         metadata_header=metadata_header, global_step=epoch)
+    writer.add_embedding(global_embeddings, metadata=global_metadata, tag='global_embedding',
+                         metadata_header=['cell_type', 'sparsity', 'cell_id'], global_step=epoch)
 
 
 def run(config, root, eval_batch_size=512, logdir=None):
@@ -96,16 +147,34 @@ def run(config, root, eval_batch_size=512, logdir=None):
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size)
 
     # make model
-    trial_encoder = MLP(config['mlp_layers'], dropout=config['net_dropout'], batchnorm=config['batchnorm'])
-    pool = global_mean_pool
-    classifier = MLP([config['mlp_layers'][-1], 32, num_classes], dropout=config['net_dropout'])
+    feature_size = config['mlp_layers'][-1]
+    # trial_encoder = MLP(config['mlp_layers'], dropout=config['net_dropout'], batchnorm=config['batchnorm'])
+    trial_encoder = BlockMLP()
+    classifier = MLP([feature_size*2, 32, num_classes], dropout=config['net_dropout'])
+
+    if config['pool'] == 'mean':
+        pool = global_mean_pool
+    elif config['pool'] == 'max':
+        pool = global_max_pool
+    elif config['pool'] == 'sort':
+        pool = partial(global_sort_pool, k=8)
+    elif config['pool'] == 'attention':
+        pool = MultiHeadPooling(GlobalAttention(feature_size, feature_size//2, heads=1),
+                                GlobalAttention(feature_size, feature_size//2, heads=1),
+                                GlobalAttention(feature_size, feature_size//2, heads=1),
+                                GlobalAttention(feature_size, feature_size//2, heads=1))
+    elif config['pool'] == 'set2set':
+        pool = Set2Set(feature_size, processing_steps=2, num_layers=1)
+    else:
+        raise ValueError
 
     model = GlobalPoolingModel(trial_encoder, classifier, pool=pool).to(device)
 
     # training
     criterion = nn.NLLLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
+    optimizer = optim.Adam(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=config['milestones'], gamma=0.1)
+    # scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.92)
 
     # logging
     writer = SummaryWriter(logdir)
@@ -127,25 +196,30 @@ def run(config, root, eval_batch_size=512, logdir=None):
             max_val_f1 = val_f1
             max_test_f1 = test_f1
 
+    visualize(model, test_loader, writer, 'train', epoch, class_names=class_names)
+
+    torch.save(model, 'model.pt')
+
     print('Final metrics: train (%.2f), val (%.2f), test (%.2f)' %(max_train_f1, max_val_f1, max_test_f1))
 
 
 def main():
     data_root = os.path.join(os.getcwd(), 'data/')  # path to data
-    logdir = './runs/v1_mlp'
+    logdir = './runs/v1_17_blockmlp_multihead_att_6'
 
     config = {
-        "trial_dropout": 0.2,
+        "trial_dropout": 0.3,
         "split_seed": 1,
         "num_bins": 128,
-        "batch_size": 128,
-        "mlp_layers": [-1, 128, 64, 64, 32],
-        "net_dropout": 0.2,
-        "batchnorm": False,
-        "lr": 1e-3,
-        "weight_decay": 1e-5,
-        "epochs": 400,
-        "milestones": [400],
+        "batch_size": 256,
+        "pool": 'attention',
+        "mlp_layers": [-1, 64, 64, 32],
+        "net_dropout": 0.3,
+        "batchnorm": True,
+        "lr": 1e-2,
+        "weight_decay": 1e-6,
+        "epochs": 120,
+        "milestones": [50, 80],
         }
 
     run(config, root=data_root, logdir=logdir)

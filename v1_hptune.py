@@ -14,10 +14,10 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import DataLoader
-from torch_geometric.nn import global_mean_pool, global_max_pool, global_sort_pool, GlobalAttention, Set2Set
+from torch_geometric.nn import global_mean_pool, global_max_pool, global_sort_pool, Set2Set
 
 from celltype.data import V1CellSets
-from celltype.models import GlobalPoolingModel, MLP
+from celltype.models import GlobalPoolingModel, MLP, GlobalAttention
 from celltype.transforms import Dropout
 from celltype.visualization import plot_confusion_matrix
 
@@ -28,6 +28,7 @@ def train(model, train_loader, criterion, optimizer, writer, current_step):
 
     for data in train_loader:
         x, batch, target = data.x, data.batch, data.y
+        batch = batch.to(x.device)
         optimizer.zero_grad()
         output = model(x, batch)
         loss = criterion(output, target)
@@ -45,9 +46,10 @@ def test(model, loader, writer, tag, epoch, class_names=None):
 
     predictions = []
     targets = []
-    with torch.no_grad():
+    with torch.inference_mode():
         for data in loader:
             x, batch, target = data.x, data.batch, data.y
+            batch = batch.to(x.device)
             output = model(x, batch)
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             pred = np.ndarray.flatten(pred.cpu().numpy())
@@ -75,7 +77,6 @@ def test(model, loader, writer, tag, epoch, class_names=None):
 
 
 def run(config, root, eval_batch_size=512, logdir=None):
-    print(os.getcwd())
     device = torch.device("cuda")
 
     # augmentation during training
@@ -112,8 +113,7 @@ def run(config, root, eval_batch_size=512, logdir=None):
     elif config['pool'] == 'sort':
         pool = partial(global_sort_pool, k=8)
     elif config['pool'] == 'attention':
-        pool = GlobalAttention(gate_nn=MLP([feature_size, feature_size, 1]),
-                               nn=MLP([feature_size, feature_size, feature_size]))
+        pool = GlobalAttention(feature_size, feature_size, heads=1)
     elif config['pool'] == 'set2set':
         pool = Set2Set(feature_size, processing_steps=2, num_layers=1)
     else:
@@ -124,7 +124,7 @@ def run(config, root, eval_batch_size=512, logdir=None):
     # training
     criterion = nn.NLLLoss()
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=config['milestones'], gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[config['milestones']], gamma=0.1)
 
     # logging
     writer = SummaryWriter(logdir)
@@ -167,12 +167,12 @@ def main():
         "batch_size": tune.choice([64, 128, 256, 512]),
         "mlp_layers": tune.choice([[-1, 128, 64, 64, 32], [-1, 64, 64, 32], [-1, 64, 64, 64, 64, 64, 32]]),
         "net_dropout": tune.quniform(0.0, 0.4, 0.1),
-        "pool": tune.choice(['mean', 'mean', 'max', 'max', 'sort', 'attention', 'set2set']),
+        "pool": tune.choice(['attention']),
         "batchnorm": tune.choice([True, False]),
         "lr": tune.loguniform(1e-5, 1),
         "weight_decay": tune.loguniform(1e-7, 1e-3),
-        "epochs": tune.choice([2]),
-        "milestones": tune.choice([[200], [200, 300], [300], [300, 380]])
+        "epochs": tune.choice([100]),
+        "milestones": tune.choice([80, 90, 100])
         }
 
     reporter = CLIReporter(

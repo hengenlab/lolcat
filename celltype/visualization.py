@@ -32,3 +32,10 @@ def plot_confusion_matrix(cm, class_names=None, xlabel='Predicted label', ylabel
     plt.ylabel(ylabel)
     plt.xlabel(xlabel)
     return figure
+
+
+def generate_fingerprint(x, vmax=8):
+    norm = plt.Normalize(vmin=0, vmax=vmax)
+    colors = plt.cm.plasma(norm(x))
+    colors = np.tile(colors, (5, 1, 1, 1)).transpose(1,3,0,2)[:, :3]
+    return colors
