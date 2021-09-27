@@ -41,8 +41,13 @@ class Dataset:
             self.num_trials = 100
         elif self.data_source == 'neuropixels':
             self.num_trials = 600
+        elif self.data_source == 'neuropixels_nm':
+            self.num_trials = 400
         elif self.data_source == 'calcium':
             self.num_trials = 600
+        elif self.data_source == 'calcium_nm':
+            self.num_trials = 400
+        
             
         # check if already processed
         already_processed, filename = self._look_for_processed_file()
@@ -88,7 +93,9 @@ class Dataset:
         CELL_METADATA_FILENAME = {
             'v1': 'v1_nodes.csv',
             'neuropixels': 'neuropixels_nodes.csv',
+            'neuropixels_nm': 'neuropixels_all_nm_nodes.csv',
             'calcium': 'calcium_nodes.csv',
+            'calcium_nm': 'calcium_all_nn_nodes.csv'
         }
 
         try:
@@ -117,7 +124,9 @@ class Dataset:
         SPIKE_FILENAME = {
             'v1': 'v1_spikes.csv',
             'neuropixels': 'neuropixels_spikes.csv',
-            'calcium': 'calcium_spikes.csv'
+            'neuropixels_nm': 'neuropixels_all_nm_spikes.csv',
+            'calcium': 'calcium_spikes.csv',
+            'calcium_nm': 'calcium_all_nm_spikes.csv'
         }
 
         try:
@@ -142,12 +151,15 @@ class Dataset:
         GRATINGS_FILENAME = {
             'v1':'v1_gratings_order.txt',
             'neuropixels':'neuropixels_gratings_order.txt',
-            'calcium':'calcium_gratings_order.txt'
+            'neuropixels_nm':'neuropixels_nm_order.txt',
+            'calcium':'calcium_gratings_order.txt',
+            'calcium_nm':'calcium_nm_order.txt'
         }
         filename = os.path.join(self.root_dir, self.raw_dir, GRATINGS_FILENAME[self.data_source])
-
-        if self.data_source == 'calcium' or self.data_source.startswith('neuropixels'):
+        '''
+        if self.data_source.startswith('calcium') or self.data_source.startswith('neuropixels'):
             print('({}) trial data not yet fully vetted. Going ahead...'.format(self.data_source))
+        '''
         df = pd.read_csv(filename, engine='python', sep='  ', skiprows=12, usecols=[3], names=['filename'])
         assert len(df) == self.num_trials
 
@@ -156,8 +168,13 @@ class Dataset:
         trial_id = df.filename.apply(lambda x: int(re.search(p, x).group(1))).to_list()
 
         # parse orientation
-        p = re.compile(r"ori([0-9]*\.?[0-9]+)")
-        orientation = df.filename.apply(lambda x: float(re.search(p, x).group(1))).to_list()
+        if self.data_source in ['neuropixels','calcium','v1']:
+            print('WARNING: trial id in neuropixels and calcium drifting gratings is dummy-valued')
+            p = re.compile(r"ori([0-9]*\.?[0-9]+)")
+            orientation = df.filename.apply(lambda x: float(re.search(p, x).group(1))).to_list()
+        else: #does not apply for naturalistic movies getting idx of first frame instead 
+            p = re.compile(r"_f([0-9]+)")
+            orientation = df.filename.apply(lambda x: float(re.search(p, x).group(1))).to_list()
 
         trial_table = pd.DataFrame({'trial': trial_id, 'orientation': orientation})
         return trial_table
@@ -267,8 +284,10 @@ class Dataset:
         for i, cell in enumerate(select_mask):
             cell_spike_times = self.spike_times[cell]
             if np.isnan(cell_spike_times[0]):
+                print(i,cell,'never fires')
                 # cell that never fires
                 raise ValueError
+            print(i,cell,'fires')
             # only keep spike times between start_time and end_time
             cell_spike_times = cell_spike_times[(start_time <= cell_spike_times) & (cell_spike_times <= end_time)]
             cell_spike_times = np.sort(cell_spike_times)
@@ -298,6 +317,7 @@ class Dataset:
             end_time = start_time + (self.trial_length * num_trials_in_window)
 
             # select data
+            print(start_time,end_time)
             X.append(self._select_data(cell_ids, start_time, end_time) - start_time)
             cell_index.append(np.arange(len(cell_ids)))
         #print([(idx,x,x.shape) for idx,x in enumerate(X) if len(x.shape) == 2])

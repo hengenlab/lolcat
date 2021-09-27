@@ -7,20 +7,26 @@ import pandas as pd
 
 CELL_METADATA_FILENAME = {
     'v1': 'v1_nodes.csv',
-    'neuropixels': 'neuropixels_nodes.csv',
-    'calcium': 'calcium_nodes.csv'
+    'neuropixels': 'neuropixels_all_nm_nodes.csv',
+    'neuropixels_nm': 'neuropixels_all_nm_nodes.csv',
+    'calcium': 'calcium_all_nm_nodes.csv',
+    'calcium_nm': 'neuropixels_all_nm_nodes.csv'
 }
 
 SPIKE_FILENAME = {
     'v1': 'v1_spikes.csv',
-    'neuropixels': 'neuropixels_all_spikes.csv',
-    'calcium': 'calcium_all_spikes.csv'
+    'neuropixels': 'neuropixels_spikes.csv',
+    'neuropixels_nm': 'neuropixels_all_nm_spikes.csv',
+    'calcium': 'calcium_spikes.csv',
+    'calcium_nm': 'calcium_all_nm_spikes.csv'
 }
 
 GRATINGS_FILENAME = {
 	'v1':'v1_gratings_order.txt',
 	'neuropixels':'neuropixels_gratings_order.txt',
-	'calcium':'calcium_gratings_order.txt'
+    'neuropixels_nm':'neuropixels_nm_order.txt',
+	'calcium':'calcium_gratings_order.txt',
+    'calcium_nm':'calcium_nm_order.txt'
 }
 
 def load_cell_metadata(root, *, data_source='v1', labels_col='pop_name'):
@@ -66,10 +72,12 @@ def load_spike_data(root, *, data_source='v1', cell_ids):
 
 def load_trial_data(root, *, data_source='v1',):
     filename = os.path.join(root, GRATINGS_FILENAME[data_source])
-
+    
+    '''
     if data_source == 'calcium' or data_source.startswith('neuropixels'):
         print('({}) trial data not yet fully tested. Giving it a try...'.format(data_source))
-
+    '''
+    
     df = pd.read_csv(filename, engine='python', sep='  ', skiprows=12, usecols=[3], names=['filename'])
 
     # parse trial id
@@ -78,8 +86,13 @@ def load_trial_data(root, *, data_source='v1',):
     trial_id = df.filename.apply(lambda x: int(re.search(p, x).group(1))).to_list()
 
     # parse orientation
-    p = re.compile(r"ori([0-9]*\.?[0-9]+)")
-    orientation = df.filename.apply(lambda x: float(re.search(p, x).group(1))).to_list()
+    if self.data_source in ['neuropixels','calcium','v1']:
+        print('WARNING: trial id in neuropixels and calcium drifting gratings is dummy-valued')
+        p = re.compile(r"ori([0-9]*\.?[0-9]+)")
+        orientation = df.filename.apply(lambda x: float(re.search(p, x).group(1))).to_list()
+        else: #does not apply for naturalistic movies getting idx of first frame instead 
+            p = re.compile(r"_f([0-9]+)")
+            orientation = df.filename.apply(lambda x: float(re.search(p, x).group(1))).to_list()
 
     trial_table = pd.DataFrame({'trial': trial_id, 'orientation': orientation})
     return trial_table
