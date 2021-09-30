@@ -80,13 +80,26 @@ def task_class(task): #select the right class for the task
                        'v1_layers_5':V1Layers5CellSets,
                        'v1_celltypes_2':V1Types2CellSets,
                        'neuropixels_brain_region_4':NeuropixelsBrainRegion4CellSets,
+                       'neuropixels_nm_brain_region_4':NeuropixelsNMBrainRegion4CellSets,
                       'neuropixels_brain_structure_29': NeuropixelsBrainStructure29CellSets,
+                       'neuropixels_nm_brain_structure_29': NeuropixelsNMBrainStructure29CellSets,
                       'neuropixels_subclass_3':NeuropixelsSubclass3CellSets,
+                       'neuropixels_nm_subclass_3':NeuropixelsNMSubclass3CellSets,
                       'neuropixels_subclass_4':NeuropixelsSubclass4CellSets,
+                       'neuropixels_nm_subclass_4':NeuropixelsNMSubclass4CellSets,
                       'calcium_brain_region_6':CalciumBrainRegion6CellSets,
                       'calcium_subclass_4':CalciumSubclass4CellSets,
                       'calcium_subclass_13':CalciumSubclass13CellSets,
-                      'calcium_class_2':CalciumClass2CellSets}    
+                      'calcium_class_2':CalciumClass2CellSets,
+                      'calcium_newtypes_4':CalciumNewTypes4CellSets,
+                       'calcium_nm_newtypes_4':CalciumNMNewTypes4CellSets,
+                       'calcium_newtypes_5':CalciumNewTypes5CellSets,
+                       'calcium_nm_newtypes_5':CalciumNMNewTypes5CellSets,
+                       'calcium_newtypes_6':CalciumNewTypes6CellSets,
+                       'calcium_nm_newtypes_6':CalciumNMNewTypes6CellSets,
+                       'calcium_newtypes_7':CalciumNewTypes7CellSets,
+                       'calcium_nm_newtypes_7':CalciumNMNewTypes7CellSets
+                      }
     return task_class_dict[task]
 
 def run(config, root, task, eval_batch_size=512, logdir=None):
