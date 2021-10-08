@@ -16,6 +16,7 @@ class Dataset:
     neuropixels: brain_region, brain_structure
     """
     trial_length = 3  # in seconds
+    #num_trials = 100
     raw_dir = 'raw/'
     processed_dir = 'processed/'
 
@@ -86,7 +87,7 @@ class Dataset:
             'neuropixels': 'neuropixels_nodes.csv',
             'neuropixels_nm': 'neuropixels_all_nm_nodes.csv',
             'calcium': 'calcium_nodes.csv',
-            'calcium_nm': 'calcium_all_nn_nodes.csv'
+            'calcium_nm': 'calcium_all_nm_nodes.csv'
         }
 
         try:
@@ -125,8 +126,7 @@ class Dataset:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
         df = pd.read_csv(filename, sep=',', usecols=['timestamps', 'node_ids'])  # only load the necessary columns
-        if self.data_source != 'neuropixels_nm':
-            df.timestamps = df.timestamps / 1000  # convert to seconds
+        df.timestamps = df.timestamps / 1000  # convert to seconds
 
         # perform inner join
         cell_series = pd.Series(self.cell_ids, name='node_ids')  # get index of cells of interest
@@ -288,7 +288,6 @@ class Dataset:
                 print(i,cell,'never fires')
                 # cell that never fires
                 raise ValueError
-            print(i,cell,'fires')
             # only keep spike times between start_time and end_time
             cell_spike_times = cell_spike_times[(start_time <= cell_spike_times) & (cell_spike_times <= end_time)]
             cell_spike_times = np.sort(cell_spike_times)

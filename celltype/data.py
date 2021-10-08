@@ -868,3 +868,284 @@ class CalciumClass2CellSets(CellSets):
 
         indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
         return SubsetRandomSampler(indices)
+    
+
+class CalciumNewTypes4CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_newtypes_4', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium', labels_col='4newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['e', 'Vip', 'Sst', 'Pvalb']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+
+class CalciumNMNewTypes4CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_nm_newtypes_4', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium_nm', labels_col='4newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['e', 'Vip', 'Sst', 'Pvalb']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+
+class CalciumNewTypes5CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_newtypes_5', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium', labels_col='5newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['Cux2', 'Sst', 'Vip', 'Pvalb', 'Rorb']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+
+class CalciumNMNewTypes5CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_nm_newtypes_5', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium_nm', labels_col='5newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['Cux2', 'Sst', 'Vip', 'Pvalb', 'Rorb']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+
+class CalciumNewTypes6CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_newtypes_6', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium', labels_col='6newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['Cux2', 'Sst', 'Ntsr1', 'Vip', 'Pvalb', 'Rorb']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+
+class CalciumNMNewTypes6CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_nm_newtypes_6', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium_nm', labels_col='6newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['Cux2', 'Sst', 'Ntsr1', 'Vip', 'Pvalb', 'Rorb']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+    
+class CalciumNewTypes7CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_newtypes_7', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium', labels_col='7newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['e4', 'Sst', 'Vip', 'Pvalb', 'e23', 'e6', 'e5']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8.75 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
+    
+class CalciumNMNewTypes7CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('calcium_nm_newtypes_7', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.2):
+        dataset = CellTypeDataset(self.root, data_source='calcium_nm', labels_col='7newcelltypes', force_process=False)
+
+        # each sample must have at least 30 spikes
+        # dataset.drop_dead_cells(cutoff=180)
+
+        # cell classes identified by Louis as not being too quiet
+        class_names = ['e4', 'Sst', 'Vip', 'Pvalb', 'e23', 'e6', 'e5']
+        dataset.drop_other_classes(classes_to_keep=class_names)
+
+        dataset.split_cell_train_val_test(test_size=test_size, val_size=val_size, seed=self.random_seed)
+        return {'train': dataset.get_set('train'),
+                'val': dataset.get_set('val'),
+                'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8.75 - torch.log(class_sample_count))))
+        print(increase_factor)
+
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices) 
