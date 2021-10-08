@@ -165,13 +165,13 @@ def run(config, root, task, eval_batch_size=512, logdir=None):
 
 def main():
     data_root = os.path.join(os.getcwd(), 'data/')  # path to data
-    logdir = './runs/v1_layers_5'
-    task = 'v1_layers_5'
+    logdir = './runs/calcium_newtypes_7'
+    task = 'calcium_newtypes_7'
     print(task)
     config = {
         "trial_dropout": 0.2,
         "split_seed": 1,
-        "num_bins": 128,
+        "num_bins": 64,
         "batch_size": 128,
         "mlp_layers": [-1, 128, 64, 64, 32],
         "net_dropout": 0.2,

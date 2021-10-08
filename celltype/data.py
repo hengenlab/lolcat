@@ -1060,7 +1060,7 @@ class CalciumNewTypes7CellSets(CellSets):
         # weighted sampler
         # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
         _, class_sample_count = torch.unique(self.target, return_counts=True)
-        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8.75 - torch.log(class_sample_count))))
         print(increase_factor)
 
         indices = []
@@ -1095,7 +1095,7 @@ class CalciumNMNewTypes7CellSets(CellSets):
         # weighted sampler
         # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
         _, class_sample_count = torch.unique(self.target, return_counts=True)
-        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8 - torch.log(class_sample_count))))
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(8.75 - torch.log(class_sample_count))))
         print(increase_factor)
 
         indices = []

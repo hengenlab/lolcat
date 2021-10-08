@@ -87,7 +87,7 @@ class Dataset:
             'neuropixels': 'neuropixels_nodes.csv',
             'neuropixels_nm': 'neuropixels_all_nm_nodes.csv',
             'calcium': 'calcium_nodes.csv',
-            'calcium_nm': 'calcium_all_nn_nodes.csv'
+            'calcium_nm': 'calcium_all_nm_nodes.csv'
         }
 
         try:
@@ -125,7 +125,12 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        df = pd.read_csv(filename, sep=self.csv_sep, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
+        
+        if hasattr(self,'csv_sep'):
+            df = pd.read_csv(filename, sep=self.csv_sep, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
+        else:
+            df = pd.read_csv(filename, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
+            
         df.timestamps = df.timestamps / 1000  # convert to seconds
 
         # perform inner join
@@ -275,7 +280,6 @@ class Dataset:
                 print(i,cell,'never fires')
                 # cell that never fires
                 raise ValueError
-            print(i,cell,'fires')
             # only keep spike times between start_time and end_time
             cell_spike_times = cell_spike_times[(start_time <= cell_spike_times) & (cell_spike_times <= end_time)]
             cell_spike_times = np.sort(cell_spike_times)
