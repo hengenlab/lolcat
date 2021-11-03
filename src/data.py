@@ -125,12 +125,7 @@ class Dataset:
         except KeyError:
             KeyError('Data source ({}) does not exist.'.format(self.data_source))
 
-        
-        if hasattr(self,'csv_sep'):
-            df = pd.read_csv(filename, sep=self.csv_sep, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
-        else:
-            df = pd.read_csv(filename, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
-            
+        df = pd.read_csv(filename, sep=',', usecols=['timestamps', 'node_ids'])  # only load the necessary columns
         df.timestamps = df.timestamps / 1000  # convert to seconds
 
         # perform inner join
@@ -227,15 +222,28 @@ class Dataset:
     # SPLIT TO TRAIN/VAL/TEST #
     ###########################
     def split_cell_train_val_test(self, test_size=0.2, val_size=0.2, seed=1234):
-        train_val_mask, test_mask = train_test_split(np.arange(len(self.cell_ids)),
-                                                     test_size=test_size,
-                                                     random_state=seed,
-                                                     stratify=self.cell_type_ids)
+        train_size = 1 - test_size - val_size
+        assert 0 < train_size <= 1
+        if train_size == 1.:
+            train_mask = np.arange(len(self.cell_ids))
+            val_mask, test_mask = np.array([]), np.array([])
 
-        val_size = val_size / (1 - test_size)  # adjust val size
+        else:
+            assert test_size > 0.
+            train_val_mask, test_mask = train_test_split(np.arange(len(self.cell_ids)),
+                                                         test_size=test_size,
+                                                         random_state=seed,
+                                                         stratify=self.cell_type_ids)
 
-        train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed,
-                                                stratify=self.cell_type_ids[train_val_mask])
+            if val_size == 0.:
+                train_mask = train_val_mask
+                val_mask = np.array([])
+            else:
+                val_size = val_size / (1 - test_size)  # adjust val size
+
+                train_mask, val_mask = train_test_split(train_val_mask, test_size=val_size, random_state=seed,
+                                                    stratify=self.cell_type_ids[train_val_mask])
+
         self._cell_split = {'train': train_mask, 'val': val_mask, 'test': test_mask}
 
     def split_trial_train_val_test(self, test_size=0.2, val_size=0.2, temp=True, seed=1234):

@@ -19,6 +19,7 @@ class CellSets(Dataset, ABC):
         self.root = root
         self.random_seed = random_seed
         self.num_bins = num_bins
+        self.force_process = force_process
 
         assert split in ['train', 'val', 'test']
         self.split = split
@@ -417,7 +418,7 @@ class NeuropixelsNMBrainRegion4CellSets(CellSets):
 
     def get_data(self, test_size=0.2, val_size=0.2):
         dataset = CellTypeDataset(self.root, data_source='neuropixels_nm', labels_col='brain_region',
-                                  force_process=False)
+                                  force_process=self.force_process)
 
         # each sample must have at least 30 spikes
         # dataset.drop_dead_cells(cutoff=180)
@@ -539,7 +540,7 @@ class NeuropixelsSubclass3CellSets(CellSets):
 
     def get_data(self, test_size=0.2, val_size=0.2):
         dataset = CellTypeDataset(self.root, data_source='neuropixels', labels_col='subclass_unlabeled',
-                                  force_process=False)
+                                  force_process=self.force_process)
 
         # each sample must have at least 30 spikes
         # dataset.drop_dead_cells(cutoff=180)
@@ -576,7 +577,7 @@ class NeuropixelsNMSubclass3CellSets(CellSets):
 
     def get_data(self, test_size=0.2, val_size=0.2):
         dataset = CellTypeDataset(self.root, data_source='neuropixels_nm', labels_col='subclass_unlabeled',
-                                  force_process=False)
+                                  force_process=self.force_process)
 
         # each sample must have at least 30 spikes
         # dataset.drop_dead_cells(cutoff=180)
@@ -589,6 +590,48 @@ class NeuropixelsNMSubclass3CellSets(CellSets):
         return {'train': dataset.get_set('train'),
                 'val': dataset.get_set('val'),
                 'test': dataset.get_set('test')}, class_names
+
+    def get_sampler(self):
+        # weighted sampler
+        # THIS WILL ONLY WORK FOR V1 DATA WITH 17 CLASSES, NEEDS TO BE ADJUSTED FOR OTHER TARGETS/DATASETS
+        _, class_sample_count = torch.unique(self.target, return_counts=True)
+        increase_factor = torch.floor(torch.pow(1.5, torch.floor(6 - torch.log(class_sample_count))))
+        print(increase_factor)
+        # increase_factor = tensor([2., 2., 2.])
+        indices = []
+        for cell_type, factor in enumerate(increase_factor.cpu()):
+            cell_indices = torch.where(self.target == cell_type)[0]
+            for _ in range(int(factor)):
+                indices.append(cell_indices)
+
+        indices = torch.cat(indices)  # [0, 1, 1, 2, 3, 4, 5]
+        return SubsetRandomSampler(indices)
+
+
+class NeuropixelsDGNMSubclass3CellSets(CellSets):
+    def __init__(self, root, split, random_seed, num_bins=128, force_process=False, transform=None):
+        super().__init__('neuropixels_dg_nm_3classes', root, split, random_seed, num_bins, force_process, transform)
+
+    def get_data(self, test_size=0.2, val_size=0.):
+        dataset_nm = CellTypeDataset(self.root, data_source='neuropixels_nm', labels_col='subclass_unlabeled',
+                                     force_process=self.force_process)
+
+        class_names = ['Sst', 'Vip', 'Pvalb']
+        dataset_nm.drop_other_classes(classes_to_keep=class_names)
+
+        dataset_nm.split_cell_train_val_test(test_size=0., val_size=0., seed=self.random_seed)
+
+        dataset_dg = CellTypeDataset(self.root, data_source='neuropixels', labels_col='subclass_unlabeled',
+                                     force_process=self.force_process)
+
+        class_names = ['Sst', 'Vip', 'Pvalb']
+        dataset_dg.drop_other_classes(classes_to_keep=class_names)
+
+        dataset_dg.split_cell_train_val_test(test_size=test_size, val_size=0., seed=self.random_seed)
+
+        return {'train': dataset_dg.get_set('train'),
+                'val': dataset_dg.get_set('test'),
+                'test': dataset_nm.get_set('train')}, class_names
 
     def get_sampler(self):
         # weighted sampler
