@@ -17,6 +17,7 @@ class InMemoryDataset(Dataset, ABC):
         super().__init__()
         self.name = name
         self.root = root
+        self.lite = lite
 
         self.random_seed = random_seed
         self.num_bins = num_bins
@@ -35,16 +36,14 @@ class InMemoryDataset(Dataset, ABC):
             # process and save data
             self.process()
 
-        self.lite = lite
         self.data_list = self.load()
         self.set_target(target)
 
-
     def __getitem__(self, item):
-        if self.include_md:
-            data = self.data_list[item]
-        else:
+        if self.lite:
             data = Data(x=self.data_list[item].x)
+        else:
+            data = self.data_list[item]
         data.y = self.target[item]
         if self.transform is not None:
            data = self.transform(data)
@@ -149,11 +148,11 @@ class InMemoryDataset(Dataset, ABC):
 # V1 #
 ######
 class V1DGTorchDataset(InMemoryDataset):
-    def __init__(self, root, split, target, k, *, random_seed=123, num_bins=128, transform=None, force_process=False):
+    def __init__(self, root, split, target, k, *, random_seed=123, num_bins=128, transform=None, force_process=False, lite=True):
         self.k = k
         name = 'v1_{}'.format(self.k)
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
-                         force_process=force_process)
+                         force_process=force_process, lite=lite)
 
     def prepare_dataset(self, test_size=0.2, val_size=0.2):
         dataset = V1Dataset(self.root)
@@ -197,11 +196,12 @@ class V1DGTorchDataset(InMemoryDataset):
 class CalciumDGTorchDataset(InMemoryDataset):
     stimulus = 'drifting_gratings'
 
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False):
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
         self.k = k
         target = {'4': '4newcelltypes'}[self.k]
         name = 'calcium_{}_{}'.format(self.stimulus, self.k)
-        super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform, force_process=force_process)
+        super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
+                         force_process=force_process, lite=lite)
 
     def prepare_dataset(self, test_size=0.2, val_size=0.2):
         dataset = CalciumDataset(self.root, self.stimulus)
@@ -217,7 +217,7 @@ class CalciumDGTorchDataset(InMemoryDataset):
             dataset.filter_cells('7newcelltypes', keep=['e4', 'Sst', 'Vip', 'Pvalb', 'e23', 'e6', 'e5'])
         elif self.k == '13':
             dataset.filter_cells('subclass_full', keep=['Rbp4', 'Slc17a7', 'Cux2', 'Fezf2', 'Ntsr1', 'Emx1', 'Sst',
-                                                   'Tlx3', 'Scnn1a', 'Rorb', 'Nr5a1', 'Pvalb', 'Vip'])
+                                                        'Tlx3', 'Scnn1a', 'Rorb', 'Nr5a1', 'Pvalb', 'Vip'])
         else:
             raise NotImplementedError
 
@@ -236,7 +236,7 @@ class CalciumDGTorchDataset(InMemoryDataset):
     @property
     def increase_factor(self):
         if self.k == '4':
-            increase_factor = torch.FloatTensor([50., 30, 20, 1.])
+            increase_factor = torch.FloatTensor([50., 50, 20, 1.])
         elif self.k == '7':
             #todo adjust
             increase_factor = torch.FloatTensor([1., 1., 1., 1., 1., 1., 1.])

@@ -11,7 +11,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, balanced
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import DataLoader
-from torch_geometric.nn import global_mean_pool, global_max_pool, global_sort_pool, Set2Set, global_add_pool, GraphMultisetTransformer, GCNConv
+from torch_geometric.nn import global_mean_pool, global_max_pool, global_sort_pool, Set2Set, GraphMultisetTransformer, GCNConv
 from tqdm import tqdm
 
 
@@ -26,9 +26,9 @@ def train(model, train_loader, criterion, optimizer, writer, current_step, devic
 
     for data in train_loader:
         x, batch, target = data.x, data.batch, data.y
-        x = x.to(device)
+        x = x.to(device).float()
         target = target.to(device)
-        batch = batch.to(x.device)
+        batch = batch.to(device)
         optimizer.zero_grad()
         logits, _ = model(x, batch)
         loss = criterion(logits, target)
@@ -57,7 +57,9 @@ def test(model, loader, writer, tag, epoch, device, class_names=None):
     with torch.inference_mode():
         for data in loader:
             x, batch, target = data.x, data.batch, data.y
-            batch = batch.to(x.device)
+            x = x.to(device).float()
+            target = target.to(device)
+            batch = batch.to(device)
             logits, _ = model(x, batch)
             pred = logits.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             pred = np.ndarray.flatten(pred.cpu().numpy())
@@ -143,12 +145,11 @@ def run(config, root, eval_batch_size=512, logdir=None):
     elif config['pool'] == 'graph_attention':
         pool = GraphMultisetTransformer(
             in_channels=feature_size,
-            hidden_channels=feature_size,
-            out_channels=feature_size,
-            Conv=GCNConv,
+            hidden_channels=2*feature_size,
+            out_channels=2*feature_size,
             num_nodes=600,
             pooling_ratio=0.25,
-            pool_sequences=['GMPool_G', 'SelfAtt', 'GMPool_I'],
+            pool_sequences=["GMPool_I", "SelfAtt", "GMPool_I"],
             num_heads=4,
             layer_norm=False,
         )
@@ -169,13 +170,15 @@ def run(config, root, eval_batch_size=512, logdir=None):
     current_step = 0
     for epoch in tqdm(range(1, config['epochs'] + 1)):
         # train
-        current_step = train(model, train_loader, criterion, optimizer, writer, current_step, device, class_names=class_names, unnormalize=normalize.unnormalize_x)
+        current_step = train(model, train_loader, criterion, optimizer, writer, current_step, device,
+                             class_names=class_names, unnormalize=normalize.unnormalize_x)
         scheduler.step()
 
         # eval
         train_f1 = test(model, train_eval_loader, writer, 'train', epoch, device, class_names=class_names)
         val_f1 = test(model, val_loader, writer, 'val', epoch, device, class_names=class_names)
-        test_f1 = test(model, test_loader, writer, 'test', epoch,device, class_names=class_names)
+        test_f1 = test(model, test_loader, writer, 'test', epoch, device, class_names=class_names)
+        test(model, nm_test_loader, writer, 'test_nm', epoch, device, class_names=class_names)
 
         if val_f1 > max_val_f1:
             max_train_f1 = train_f1
@@ -190,7 +193,7 @@ def run(config, root, eval_batch_size=512, logdir=None):
 
 def main():
     data_root = os.path.join(os.getcwd(), 'data/')  # path to data
-    logdir = './runs/calcium_df_4_11'
+    logdir = './runs/calcium_dg_attention'
 
     config = {
         "trial_dropout": 0.4,
