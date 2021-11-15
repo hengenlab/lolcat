@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from torch.utils.data.sampler import SubsetRandomSampler, WeightedRandomSampler
 from torch_geometric.data import Data
 
-from lolcat.data import V1Dataset, CalciumDataset
+from lolcat.data import V1Dataset, CalciumDataset, NeuropixelsDataset
 
 
 class InMemoryDataset(Dataset, ABC):
@@ -198,7 +198,7 @@ class CalciumDGTorchDataset(InMemoryDataset):
 
     def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
         self.k = k
-        target = {'4': '4newcelltypes'}[self.k]
+        target = {'4': '4newcelltypes', '8': 'subclass_full', '8s': 'subclass_full'}[self.k]
         name = 'calcium_{}_{}'.format(self.stimulus, self.k)
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
@@ -215,6 +215,8 @@ class CalciumDGTorchDataset(InMemoryDataset):
             dataset.filter_cells('6newcelltypes', keep=['Cux2', 'Sst', 'Ntsr1', 'Vip', 'Pvalb', 'Rorb'])
         elif self.k == '7':
             dataset.filter_cells('7newcelltypes', keep=['e4', 'Sst', 'Vip', 'Pvalb', 'e23', 'e6', 'e5'])
+        elif self.k == '8' or self.k == '8s':
+            dataset.filter_cells('subclass_full', keep=['Rbp4',  'Cux2', 'Fezf2', 'Ntsr1', 'Tlx3', 'Scnn1a', 'Rorb', 'Nr5a1'])
         elif self.k == '13':
             dataset.filter_cells('subclass_full', keep=['Rbp4', 'Slc17a7', 'Cux2', 'Fezf2', 'Ntsr1', 'Emx1', 'Sst',
                                                         'Tlx3', 'Scnn1a', 'Rorb', 'Nr5a1', 'Pvalb', 'Vip'])
@@ -231,7 +233,10 @@ class CalciumDGTorchDataset(InMemoryDataset):
         return data
 
     def filter_data(self, data, thresh=5.):
-        return (data.x.sum(dim=1) >= thresh).sum() > 0
+        cond = (data.x.sum(dim=1) >= thresh).sum() > 0
+        if self.k == '8s':
+            cond = cond and data.brain_region == 'VISp'
+        return cond
 
     @property
     def increase_factor(self):
@@ -250,6 +255,41 @@ class CalciumDGTorchDataset(InMemoryDataset):
 class CalciumNMTorchDataset(CalciumDGTorchDataset):
     stimulus = 'naturalistic_movies'
 
+
+###############
+# NEUROPIXELS #
+###############
+class NeuropixelsDGTorchDataset(InMemoryDataset):
+    stimulus = 'drifting_gratings'
+
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
+        self.k = k
+        target = {'3': 'subclass'}[self.k]
+        name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
+        super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
+                         force_process=force_process, lite=lite)
+
+    def prepare_dataset(self, test_size=0.2, val_size=0.2):
+        dataset = NeuropixelsDataset(self.root, self.stimulus)
+        if self.k == '3':
+            dataset.filter_cells('subclass', keep=['Pvalb', 'Sst', 'Vip'])
+        else:
+            raise NotImplementedError
+
+        dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by='subclass')
+        return dataset
+
+    def compute_feats(self, data):
+        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
+        data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
+        return data
+
+    def filter_data(self, data):
+        return True
+
+
+class NeuropixelsNMTorchDataset(NeuropixelsDGTorchDataset):
+    stimulus = 'naturalistic_movies'
 
 
 #########

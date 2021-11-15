@@ -346,6 +346,9 @@ class CalciumDataset(Dataset):
         filename = os.path.join(self.root_dir, self.raw_dir, self.cell_metadata_filename[self.stimulus])
         df = pd.read_csv(filename, index_col='id')
 
+        if self.name == 'neuropixels':
+            df = df[~df.isnull().any(axis=1)]
+
         # sort cells by id
         df.sort_index(inplace=True)
 
@@ -397,6 +400,7 @@ class CalciumDataset(Dataset):
                 i = np.where((start_[1:] - end_[:-1]) > 30)[0] + 1
                 blocks = [(start_[0], end_[i - 1]), (start_[i], end_[-1])]
             else:
+                start_, end_ = np.array(df_session.start), np.array(df_session.end)
                 blocks = [(start_[0], end_[-1])]
             try:
                 session_id = self.session_names.index(session_name)
@@ -479,8 +483,8 @@ class NeuropixelsDataset(CalciumDataset):
     }
 
     session_filename = {
-        'drifting_gratings': '',
-        'naturalistic_movies': '',
+        'drifting_gratings': 'neuropixels_times_drifting_gratings.csv',
+        'naturalistic_movies': 'neuropixels_times_natural_movie_three_no_bads.csv',
     }
 
     spike_filename = {
