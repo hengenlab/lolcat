@@ -91,6 +91,12 @@ class LOLCAT(nn.Module):
             return logits, {'global_emb': global_emb}
 
 
+def init_last_layer_imbalance(model, class_weights):
+    final_layer = list(model.named_modules())[-1][1]
+    init_bias = torch.log(class_weights)
+    print(final_layer, class_weights, init_bias)
+    final_layer.bias.data.copy_(init_bias)
+
 
 class LOLCATwConfidence(nn.Module):
     def __init__(self, encoder, classifier, logvar, pool):
