@@ -20,6 +20,8 @@ class Dropout:
                 dropout_p = dropout_p/dropout_p.mean()
                 dropout_p = dropout_p * self.dropout_p * torch.rand(1) # randomized dropout
                 dropout_p = torch.clip(dropout_p, 0., self.dropout_p).squeeze()
+            else:
+                dropout_p = self.dropout_p
 
             # dropout entire trials
             dropout_mask = torch.empty((x.size(0),), dtype=torch.float32, device=x.device).uniform_(0, 1) > dropout_p
