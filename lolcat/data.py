@@ -93,6 +93,12 @@ class Dataset:
     ###########################
     # SPLIT TO TRAIN/VAL/TEST #
     ###########################
+    def load_train_val_test_split(self, split_filename):
+        df = pd.read_csv(split_filename)
+        cell_series = pd.Series(self.cell_ids, name='unit_id')  # get index of cells of interest
+        df = df.merge(cell_series, how='right', on='unit_id')  # do a one-to-many mapping so that cells that are not
+        self._cell_split = {'train': np.where(df.set == 'train')[0], 'val': np.where(df.set == 'val')[0], 'test': np.where(df.set == 'test')[0]}
+
     def train_val_test_split(self, train_size=None, test_size=None, val_size=None, random_seed=1234, stratify_by=None):
         # parse sizes
         n_args = (train_size is not None) + (test_size is not None) + (val_size is not None)
@@ -428,8 +434,8 @@ class CalciumDataset(Dataset):
         filename = os.path.join(self.root_dir, self.raw_dir, self.metadata_filename[self.stimulus])
         df = pd.read_csv(filename)
 
-        cell_series = pd.Series(self.cell_ids, name='dg_id')  # get index of cells of interest
-        df = df.merge(cell_series, how='right', on='dg_id')  # do a one-to-many mapping so that cells that are not
+        cell_series = pd.Series(self.cell_ids, name='cell_specimen_id')  # get index of cells of interest
+        df = df.merge(cell_series, how='right', on='cell_specimen_id')  # do a one-to-many mapping so that cells that are not
 
         fields = ['area', 'tld1_name', 'tld2_name', 'tlr1_name', 'imaging_depth', 'osi_dg', 'dsi_dg', 'pref_dir_dg',
                   'pref_tf_dg', 'p_dg', 'g_dsi_dg', 'g_osi_dg', 'p_run_mod_dg', 'peak_dff_dg', 'reliability_dg',

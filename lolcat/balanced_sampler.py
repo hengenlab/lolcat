@@ -68,11 +68,10 @@ class MySampler(Sampler[int]):
         for i in range(self.factors.size(0)):
             undertrained_score = (avg_train_loss[i] - global_avg_train_loss) / global_std_train_loss
             overfitting_score = avg_val_loss[i] - avg_train_loss[i]
-            # score = undertrained_score + 0.5 * torch.relu(overfitting_score)
 
-            print(i, ' - ', 'global_avg_train_loss:', global_avg_train_loss,  'global_std_train_loss:', global_std_train_loss,
-                  'loss:', avg_train_loss[i], 'undertrained_score:', undertrained_score, 'overfit:', overfitting_score,
-                  'factor:', self.factors[i])
+            # print(i, ' - ', 'global_avg_train_loss:', global_avg_train_loss,  'global_std_train_loss:', global_std_train_loss,
+            #      'loss:', avg_train_loss[i], 'undertrained_score:', undertrained_score, 'overfit:', overfitting_score, 'factor:', self.factors[i])
+
             if undertrained_score > 0.:
                 if overfitting_score < 2 * global_std_train_loss:
                     self.factors[i] = self.factors[i] / 0.99
