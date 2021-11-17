@@ -153,6 +153,7 @@ class InMemoryDataset(Dataset, ABC):
 ######
 class V1DGTorchDataset(InMemoryDataset):
     type = 'v1'
+    stimilus = 'drifting_gratings'
 
     def __init__(self, root, split, target, k, *, random_seed=123, num_bins=128, transform=None, force_process=False, lite=True):
         self.k = k
