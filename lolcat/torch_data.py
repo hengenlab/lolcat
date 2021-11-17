@@ -153,7 +153,7 @@ class InMemoryDataset(Dataset, ABC):
 ######
 class V1DGTorchDataset(InMemoryDataset):
     type = 'v1'
-    stimilus = 'drifting_gratings'
+    stimulus = 'drifting_gratings'
 
     def __init__(self, root, split, target, k, *, random_seed=123, num_bins=128, transform=None, force_process=False, lite=True):
         self.k = k
@@ -246,7 +246,7 @@ class CalciumDGTorchDataset(InMemoryDataset):
         return dataset
 
     def compute_feats(self, data):
-        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
+        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=False)
         data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
         return data
 
