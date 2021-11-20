@@ -14,7 +14,7 @@ from torch_geometric.data import DataLoader
 from torch_geometric.nn import global_mean_pool
 from tqdm import tqdm
 
-from lolcat import CalciumDGTorchDataset, CalciumNMTorchDataset
+from lolcat import NeuropixelsDGTorchDataset, NeuropixelsNMTorchDataset
 from lolcat import LOLCAT, MLP, GlobalAttention, MultiHeadPooling, init_last_layer_imbalance
 from lolcat import Dropout, compute_mean_std, Normalize, Compose
 from lolcat import MySampler
@@ -93,7 +93,7 @@ def run(config, root, eval_batch_size=4096, logdir=None):
     device = torch.device("cuda")
 
     # normalize
-    train_dataset = CalciumDGTorchDataset(root, 'train', k='4', random_seed=config['split_seed'], num_bins=90)
+    train_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90)
     mean, std = compute_mean_std(train_dataset)
 
     # augmentation during training
@@ -101,11 +101,11 @@ def run(config, root, eval_batch_size=4096, logdir=None):
     normalize = Normalize(mean, std)
 
     # get data
-    train_dataset = CalciumDGTorchDataset(root, 'train', k='4', random_seed=config['split_seed'], num_bins=90, transform=transform)# .to(device)
-    train_eval_dataset = CalciumDGTorchDataset(root, 'train', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
-    val_dataset = CalciumDGTorchDataset(root, 'val', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
-    test_dataset = CalciumDGTorchDataset(root, 'test', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) # .to(device)
-    nm_test_dataset = CalciumNMTorchDataset(root, 'test', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
+    train_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90, transform=transform)
+    train_eval_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
+    val_dataset = NeuropixelsDGTorchDataset(root, 'val', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
+    test_dataset = NeuropixelsDGTorchDataset(root, 'test', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
+    nm_test_dataset = NeuropixelsNMTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
 
     class_names = train_dataset.class_names
     num_classes = len(class_names)
@@ -124,15 +124,13 @@ def run(config, root, eval_batch_size=4096, logdir=None):
     # make model
     feature_size = config['mlp_layers'][-1]
     trial_encoder = MLP(config['mlp_layers'], dropout=config['net_dropout'], batchnorm=config['batchnorm'])
-    classifier = MLP([2 * feature_size, feature_size, num_classes], dropout=config['net_dropout'])
+    classifier = MLP([feature_size, feature_size, num_classes], dropout=config['net_dropout'])
 
     if config['pool'] == 'mean':
         pool = global_mean_pool
     elif config['pool'] == 'attention':
         pool = MultiHeadPooling(GlobalAttention(feature_size, feature_size//2, heads=1),
-                                GlobalAttention(feature_size, feature_size//2, heads=1),
-                                GlobalAttention(feature_size, feature_size//2, heads=1),
-                                GlobalAttention(feature_size, feature_size//2, heads=1))
+                                GlobalAttention(feature_size, feature_size//2, heads=1),)
     else:
         raise ValueError
 
@@ -171,7 +169,7 @@ def run(config, root, eval_batch_size=4096, logdir=None):
         test(model, nm_test_loader, writer, 'test_nm', epoch, device, class_names=class_names)
 
         # update sampler
-        train_loader.sampler.step(tlosses, ttargets, vlosses, vtargets)
+        # train_loader.sampler.step(tlosses, ttargets, vlosses, vtargets)
         writer.add_scalars('oversampling_factors',
                            {class_name: factor.item() for class_name, factor in zip(train_dataset.class_names, train_loader.sampler.factors)},
                            global_step=epoch)
@@ -190,21 +188,21 @@ def run(config, root, eval_batch_size=4096, logdir=None):
 
 def train_on_split(split_id):
     data_root = os.path.join(os.getcwd(), 'data/')  # path to data
-    logdir = './runs/calcium_dg_k=4/run_v4_{}'.format(split_id)
+    logdir = './runs/neuropixels_dg_k=3/run_v1_{}'.format(split_id)
 
     config = {
         "split_seed": split_id,
         "trial_dropout": 0.4,
         "num_bins": 90,
-        "batch_size": 128,
+        "batch_size": 64,
         "pool": 'attention',
-        "mlp_layers": [-1, 32, 16, 16, 16],
+        "mlp_layers": [-1, 32, 16, 8],
         "net_dropout": 0.5,
         "batchnorm": True,
-        "lr": 1e-2,
+        "lr": 1e-3,
         "weight_decay": 1e-4,
-        "epochs": 100,
-        "milestones": [5, 80],
+        "epochs": 300,
+        "milestones": [400],
         }
 
     run(config, root=data_root, logdir=logdir)
