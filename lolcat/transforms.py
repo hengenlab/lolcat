@@ -40,6 +40,7 @@ class Normalize:
             data = copy.deepcopy(data)
         x = data.x
         x = (x-self.mean.to(x.device)) / self.std.to(x.device)
+        x[:,self.std.squeeze()==0] = 0
         data.x = x
         return data
 

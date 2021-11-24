@@ -35,7 +35,7 @@ class MySampler(Sampler[int]):
         majority_class_count = torch.max(counts)
 
         oversampling_factors = majority_class_count / counts
-        oversampling_factors = torch.clip(oversampling_factors, 1., 10.)
+        oversampling_factors = torch.clip(oversampling_factors, 1., 200.)
         return oversampling_factors
 
     def oversample(self, factors):
@@ -52,8 +52,8 @@ class MySampler(Sampler[int]):
         return torch.cat(indices)
 
     def __iter__(self) -> Iterator[int]:
-        return (self.indices[i] for i in torch.randperm(len(self.indices)))
-
+         return (self.indices[i] for i in torch.randperm(len(self.indices))[:len(self)])
+        
     def __len__(self) -> int:
         return self.num_samples if self.num_samples is not None else len(self.indices)
 
@@ -83,5 +83,5 @@ class MySampler(Sampler[int]):
             # self.factors = self.factors * (0.5 + torch.rand_like(self.factors))
             pass
 
-        self.factors = torch.clip(self.factors, 0.8, 80.)
+        self.factors = torch.clip(self.factors, 0.8, 100.)
         self.indices = self.oversample(self.factors)

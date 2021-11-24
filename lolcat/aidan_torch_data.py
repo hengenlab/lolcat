@@ -4,10 +4,10 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torch.utils.data.sampler import SubsetRandomSampler
+from torch.utils.data.sampler import SubsetRandomSampler, WeightedRandomSampler
 from torch_geometric.data import Data
 
-from lolcat.data import V1Dataset, CalciumDataset, NeuropixelsDataset
+from lolcat.data import V1Dataset, CalciumDataset
 
 
 class InMemoryDataset(Dataset, ABC):
@@ -18,9 +18,6 @@ class InMemoryDataset(Dataset, ABC):
         self.name = name
         self.root = root
         self.lite = lite
-
-        if isinstance(random_seed, int) and 1 <= random_seed <= 20:
-            raise ValueError('Seeds 1..20 are reserved for predefined splits.')
 
         self.random_seed = random_seed
         self.num_bins = num_bins
@@ -109,6 +106,9 @@ class InMemoryDataset(Dataset, ABC):
     @abstractmethod
     def compute_feats(self, data):
         ...
+        #data['x'] = compute_log_isi_distribution(data['spikes'], num_bins=self.num_bins)
+        # compute_isi_distribution(data['train']['X'], num_bins=self.num_bins, add_origin=True)
+        # compute_isi_distribution(data['train']['X_block'], num_bins=180, a_min=0., a_max=6.0)
 
     @abstractmethod
     def prepare_dataset(self, test_size=0.2, val_size=0.2):
@@ -125,10 +125,6 @@ class InMemoryDataset(Dataset, ABC):
             torch.save({'target': target, 'class_names': class_names}, filename)
         processed = torch.load(filename)
         self.target, self.class_names = processed['target'], list(processed['class_names'])
-
-    @property
-    def predefined_split_filename(self):
-        return os.path.join(self.root, 'cellsplits/', '{}_{}_{}.csv'.format(self.type, self.stimulus, self.random_seed))
 
     @property
     def increase_factor(self):
@@ -152,13 +148,9 @@ class InMemoryDataset(Dataset, ABC):
 # V1 #
 ######
 class V1DGTorchDataset(InMemoryDataset):
-    type = 'v1'
-    stimulus = 'drifting_gratings'
-
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=128, transform=None, force_process=False, lite=True):
+    def __init__(self, root, split, target, k, *, random_seed=123, num_bins=128, transform=None, force_process=False, lite=True):
         self.k = k
         name = 'v1_{}'.format(self.k)
-        target = {'16': '16celltypes', '4': '4celltypes', '3': '3celltypes'}[self.k]
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
 
@@ -169,28 +161,15 @@ class V1DGTorchDataset(InMemoryDataset):
         dataset.drop_dead_cells(cutoff=30)
 
         if self.k == '13':
-            task_name = '13celltypes'
-            dataset.filter_cells(task_name, keep=['e23', 'e6', 'i5Htr3a', 'i6Pvalb', 'i5Pvalb', 'i6Sst', 'i4Htr3a',
+            dataset.filter_cells('13celltypes', keep=['e23', 'e6', 'i5Htr3a', 'i6Pvalb', 'i5Pvalb', 'i6Sst', 'i4Htr3a',
                                                       'i23Htr3a', 'e4', 'i1Htr3a', 'i4Sst', 'e5', 'i23Sst', 'i4Pvalb',
                                                       'i5Sst', 'i6Htr3a', 'i23Pvalb'])
-        elif self.k == '16':
-            task_name = '16celltypes'
-            dataset.filter_cells(task_name, keep=['i6Sst', 'e4', 'i6Htr3a', 'i5Pvalb', 'i23Pvalb', 'i23Htr3a', 'i5Sst', 'i4Sst', 'i1Htr3a', 'i6Pvalb', 'e6', 'e23', 'i4Pvalb', 'e5', 'i23Sst', 'i4Htr3a'])
-            
-
-        elif self.k == '4':
-            task_name = '4celltypes'
-            dataset.filter_cells(task_name, keep=['e','Sst','Htr3a','Pvalb'])
-        elif self.k == '3':
-            task_name = '3celltypes'
-            dataset.filter_cells(task_name, keep=['Sst','Htr3a','Pvalb'])
         else:
             raise NotImplementedError
 
-        if isinstance(self.random_seed, str):
-            dataset.load_train_val_test_split(self.predefined_split_filename)
-        else:
-            dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by=task_name)
+        # todo better startification before filtering.
+        dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed,
+                                     stratify_by='13celltypes')
         return dataset
 
     def compute_feats(self, data):
@@ -206,7 +185,6 @@ class V1DGTorchDataset(InMemoryDataset):
         if self.k == '13':
             increase_factor = torch.FloatTensor([1., 1., 2., 1., 3., 3., 3., 2., 3., 3., 3., 2., 1.])
         else:
-            # this is not required for all ks
             raise NotImplementedError
         return increase_factor
 
@@ -216,12 +194,11 @@ class V1DGTorchDataset(InMemoryDataset):
 # CALCIUM #
 ###########
 class CalciumDGTorchDataset(InMemoryDataset):
-    type = 'calcium'
     stimulus = 'drifting_gratings'
 
     def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
         self.k = k
-        target = {'4': '4newcelltypes', '8': 'subclass_full'}[self.k]
+        target = {'4': '4newcelltypes'}[self.k]
         name = 'calcium_{}_{}'.format(self.stimulus, self.k)
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
@@ -238,34 +215,39 @@ class CalciumDGTorchDataset(InMemoryDataset):
             dataset.filter_cells('6newcelltypes', keep=['Cux2', 'Sst', 'Ntsr1', 'Vip', 'Pvalb', 'Rorb'])
         elif self.k == '7':
             dataset.filter_cells('7newcelltypes', keep=['e4', 'Sst', 'Vip', 'Pvalb', 'e23', 'e6', 'e5'])
-        elif self.k == '8':
-            dataset.filter_cells('subclass_full', keep=['Rbp4',  'Cux2', 'Fezf2', 'Ntsr1', 'Tlx3', 'Scnn1a', 'Rorb', 'Nr5a1'])
         elif self.k == '13':
             dataset.filter_cells('subclass_full', keep=['Rbp4', 'Slc17a7', 'Cux2', 'Fezf2', 'Ntsr1', 'Emx1', 'Sst',
                                                         'Tlx3', 'Scnn1a', 'Rorb', 'Nr5a1', 'Pvalb', 'Vip'])
         else:
             raise NotImplementedError
 
-        if isinstance(self.random_seed, str):
-            dataset.load_train_val_test_split(self.predefined_split_filename)
+        # todo better startification before filtering.
+        
+        ### LOOK HERE ####
+        if isinstance(self.randomseed,str):
+            if self.stimulus == 'drifting_gratings':
+                dataset.load_train_val_test_split('./cellsplits/calcium_drifting_gratings_4celltypes_cell_split_{}.csv'.format(str(split_seed)))
+            elif self.stimulus == 'natural_movies':
+                dataset.load_train_val_test_split('./cellsplits/calcium_natural_movie_three_4celltypes_cell_split_{}.csv'.format(str(split_seed)))
+                
         else:
             dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by='subclass_full')
         return dataset
 
     def compute_feats(self, data):
-        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=False)
+        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
         data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
         return data
 
     def filter_data(self, data, thresh=5.):
-        cond = (data.x.sum(dim=1) >= thresh).sum() > 0
-        return cond
+        return (data.x.sum(dim=1) >= thresh).sum() > 0
 
     @property
     def increase_factor(self):
         if self.k == '4':
             increase_factor = torch.FloatTensor([50., 50, 20, 1.])
         elif self.k == '7':
+            #todo adjust
             increase_factor = torch.FloatTensor([1., 1., 1., 1., 1., 1., 1.])
         elif self.k == '6':
             increase_factor = torch.FloatTensor([1., 1., 1., 1., 1., 1.])
@@ -277,98 +259,6 @@ class CalciumDGTorchDataset(InMemoryDataset):
 class CalciumNMTorchDataset(CalciumDGTorchDataset):
     stimulus = 'naturalistic_movies'
 
-
-###############
-# NEUROPIXELS #
-###############
-class NeuropixelsDGTorchDataset(InMemoryDataset):
-    type = 'neuropixels'
-    stimulus = 'drifting_gratings'
-
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
-        self.k = k
-        target = {'3': 'subclass'}[self.k]
-        name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
-        '''
-        print('DG')
-        print('name:',name)
-        print('root:',root)
-        print('split:',split)
-        print('target:',target)
-        print('random_seed:',random_seed)
-        print('num_bins:',num_bins)
-        print('transform:',transform)
-        print('force_process:',force_process)
-        print('lite:',lite)
-        '''
-        super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
-                         force_process=force_process, lite=lite)
-
-    def prepare_dataset(self, test_size=0.2, val_size=0.2):
-        dataset = NeuropixelsDataset(self.root, self.stimulus)
-        if self.k == '3':
-            dataset.filter_cells('subclass', keep=['Pvalb', 'Sst', 'Vip'])
-        else:
-            raise NotImplementedError
-
-        if isinstance(self.random_seed, str):
-            dataset.load_train_val_test_split(self.predefined_split_filename)
-        else:
-            dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by='subclass')
-        return dataset
-
-    def compute_feats(self, data):
-        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
-        data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
-        return data
-
-    def filter_data(self, data):
-        return True
-
-
-class NeuropixelsNMTorchDataset(InMemoryDataset):
-    type = 'neuropixels'
-    stimulus = 'naturalistic_movies'
-
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
-        self.k = k
-        target = {'3': 'subclass'}[self.k]
-        name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
-        '''
-        print('NM')
-        print('name:',name)
-        print('root:',root)
-        print('split:',split)
-        print('target:',target)
-        print('random_seed:',random_seed)
-        print('num_bins:',num_bins)
-        print('transform:',transform)
-        print('force_process:',force_process)
-        print('lite:',lite)
-        '''
-        super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
-                         force_process=force_process, lite=lite)
-
-    def prepare_dataset(self, test_size=0.2, val_size=0.2):
-        dataset = NeuropixelsDataset(self.root, self.stimulus)
-        if self.k == '3':
-            dataset.filter_cells('subclass', keep=['Pvalb', 'Sst', 'Vip'])
-        else:
-            raise NotImplementedError
-
-        if isinstance(self.random_seed, str):
-            dataset.load_train_val_test_split(self.predefined_split_filename)
-        else:
-            dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by='subclass')
-        return dataset
-
-    def compute_feats(self, data):
-        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
-        data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
-        return data
-
-    def filter_data(self, data):
-        return True
 
 
 #########
