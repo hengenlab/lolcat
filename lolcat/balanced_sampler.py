@@ -52,8 +52,8 @@ class MySampler(Sampler[int]):
         return torch.cat(indices)
 
     def __iter__(self) -> Iterator[int]:
-         return (self.indices[i] for i in torch.randperm(len(self.indices))[:len(self)])
-        
+        return (self.indices[i] for i in torch.randperm(len(self.indices))[:len(self)])
+
     def __len__(self) -> int:
         return self.num_samples if self.num_samples is not None else len(self.indices)
 

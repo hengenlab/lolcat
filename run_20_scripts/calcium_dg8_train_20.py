@@ -93,7 +93,7 @@ def run(config, root, eval_batch_size=4096, logdir=None):
     device = torch.device("cuda")
 
     # normalize
-    train_dataset = CalciumDGTorchDataset(root, 'train', k='4', random_seed=config['split_seed'], num_bins=90)
+    train_dataset = CalciumDGTorchDataset(root, 'train', k='8', random_seed=config['split_seed'], num_bins=90)
     mean, std = compute_mean_std(train_dataset)
 
     # augmentation during training
@@ -101,11 +101,11 @@ def run(config, root, eval_batch_size=4096, logdir=None):
     normalize = Normalize(mean, std)
 
     # get data
-    train_dataset = CalciumDGTorchDataset(root, 'train', k='4', random_seed=config['split_seed'], num_bins=90, transform=transform)# .to(device)
-    train_eval_dataset = CalciumDGTorchDataset(root, 'train', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
-    val_dataset = CalciumDGTorchDataset(root, 'val', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
-    test_dataset = CalciumDGTorchDataset(root, 'test', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) # .to(device)
-    nm_test_dataset = CalciumNMTorchDataset(root, 'test', k='4', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
+    train_dataset = CalciumDGTorchDataset(root, 'train', k='8', random_seed=config['split_seed'], num_bins=90, transform=transform)# .to(device)
+    train_eval_dataset = CalciumDGTorchDataset(root, 'train', k='8', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
+    val_dataset = CalciumDGTorchDataset(root, 'val', k='8', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
+    test_dataset = CalciumDGTorchDataset(root, 'test', k='8', random_seed=config['split_seed'], num_bins=90, transform=normalize) # .to(device)
+    nm_test_dataset = CalciumNMTorchDataset(root, 'test', k='8', random_seed=config['split_seed'], num_bins=90, transform=normalize) #.to(device)
 
     class_names = train_dataset.class_names
     num_classes = len(class_names)
