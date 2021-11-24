@@ -20,7 +20,7 @@ class InMemoryDataset(Dataset, ABC):
         self.lite = lite
 
         if isinstance(random_seed, int) and 1 <= random_seed <= 20:
-            raise ValueError('Seeds 1..20 are reserved for predefined splits.')
+            print('Warning: Seeds 1..20 are reserved for predefined splits.')
 
         self.random_seed = random_seed
         self.num_bins = num_bins
@@ -155,9 +155,11 @@ class V1DGTorchDataset(InMemoryDataset):
     type = 'v1'
     stimulus = 'drifting_gratings'
 
-    def __init__(self, root, split, target, k, *, random_seed=123, num_bins=128, transform=None, force_process=False, lite=True):
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=128, transform=None, force_process=False,
+                 lite=True):
         self.k = k
         name = 'v1_{}'.format(self.k)
+        target = {'16': '16celltypes', '4': '4celltypes', '3': '3celltypes'}[self.k]
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
 
@@ -167,28 +169,26 @@ class V1DGTorchDataset(InMemoryDataset):
         # each sample must have at least 30 spikes
         dataset.drop_dead_cells(cutoff=30)
 
-        if self.k == '13':
-            dataset.filter_cells('13celltypes', keep=['e23', 'e6', 'i5Htr3a', 'i6Pvalb', 'i5Pvalb', 'i6Sst', 'i4Htr3a',
-                                                      'i23Htr3a', 'e4', 'i1Htr3a', 'i4Sst', 'e5', 'i23Sst', 'i4Pvalb',
-                                                      'i5Sst', 'i6Htr3a', 'i23Pvalb'])
+        if self.k == '16':
+            dataset.filter_cells('16celltypes',
+                                 keep=['i6Sst', 'e4', 'i6Htr3a', 'i5Pvalb', 'i23Pvalb', 'i23Htr3a', 'i5Sst', 'i4Sst',
+                                       'i1Htr3a', 'i6Pvalb', 'e6', 'e23', 'i4Pvalb', 'e5', 'i23Sst', 'i4Htr3a'])
         elif self.k == '4':
-            # todo @Aidan
-            raise NotImplementedError
+            dataset.filter_cells('4celltypes', keep=['e', 'Sst', 'Htr3a', 'Pvalb'])
         elif self.k == '3':
-            # todo @Aidan
-            raise NotImplementedError
+            dataset.filter_cells('3celltypes', keep=['Sst', 'Htr3a', 'Pvalb'])
         else:
             raise NotImplementedError
 
         if isinstance(self.random_seed, str):
             dataset.load_train_val_test_split(self.predefined_split_filename)
         else:
-            dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by='subclass_full')
+            dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed,
+                                         stratify_by='16celltypes')
         return dataset
 
     def compute_feats(self, data):
         data['x'] = compute_log_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=-2.5, a_max=0.5)
-        # data['x_global'] = compute_log_isi_distribution(data['spike_blocks'], num_bins=self.num_bins, a_min=-2.5, a_max=0.5)
         return data
 
     def filter_data(self, data):
@@ -202,7 +202,6 @@ class V1DGTorchDataset(InMemoryDataset):
             # this is not required for all ks
             raise NotImplementedError
         return increase_factor
-
 
 
 ###########
@@ -299,8 +298,8 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
         return dataset
 
     def compute_feats(self, data):
-        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
-        data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
+        data['x'] = compute_log_isi_distribution(data['spikes'], num_bins=self.num_bins)
+        # data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
         return data
 
     def filter_data(self, data):
