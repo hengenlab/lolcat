@@ -40,6 +40,7 @@ class InMemoryDataset(Dataset, ABC):
             self.process()
 
         self.data_list = self.load()
+        print(target)
         self.set_target(target)
 
     def __getitem__(self, item):
@@ -66,6 +67,7 @@ class InMemoryDataset(Dataset, ABC):
 
     def load(self):
         filename = self.processed_filename(self.split)
+        print('filename',filename)
         processed = torch.load(filename)
         return processed['data_list']
 
@@ -115,6 +117,7 @@ class InMemoryDataset(Dataset, ABC):
         ...
 
     def set_target(self, label):
+        #print(label,self.data_list[0].keys)
         assert label in self.data_list[0].keys
         filename = self.processed_filename(self.split)
         filename = '{}_{}.pt'.format(os.path.splitext(filename)[0], label)
@@ -280,22 +283,11 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
     type = 'neuropixels'
     stimulus = 'drifting_gratings'
 
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,min_amplitude_cutoff=0,max_isi_violations=0):
         self.k = k
+        self.min_presence_ratio, self.min_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, min_amplitude_cutoff, max_isi_violations
         target = {'3': 'subclass'}[self.k]
         name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
-        '''
-        print('DG')
-        print('name:',name)
-        print('root:',root)
-        print('split:',split)
-        print('target:',target)
-        print('random_seed:',random_seed)
-        print('num_bins:',num_bins)
-        print('transform:',transform)
-        print('force_process:',force_process)
-        print('lite:',lite)
-        '''
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
 
@@ -318,29 +310,22 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
         return data
 
     def filter_data(self, data):
-        return True
+        cond1 = self.min_presence_ratio <= data.presence_ratio
+        cond2 = self.min_amplitude_cutoff <= data.amplitude_cutoff
+        cond3 = self.max_isi_violations >= data.isi_violations
+        cond = min([cond1,cond2,cond3])
+        return cond
 
 
 class NeuropixelsNMTorchDataset(InMemoryDataset):
     type = 'neuropixels'
     stimulus = 'naturalistic_movies'
 
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True):
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,min_amplitude_cutoff=0,max_isi_violations=0):
         self.k = k
         target = {'3': 'subclass'}[self.k]
         name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
-        '''
-        print('NM')
-        print('name:',name)
-        print('root:',root)
-        print('split:',split)
-        print('target:',target)
-        print('random_seed:',random_seed)
-        print('num_bins:',num_bins)
-        print('transform:',transform)
-        print('force_process:',force_process)
-        print('lite:',lite)
-        '''
+        self.min_presence_ratio, self.min_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, min_amplitude_cutoff, max_isi_violations
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
 
@@ -363,7 +348,11 @@ class NeuropixelsNMTorchDataset(InMemoryDataset):
         return data
 
     def filter_data(self, data):
-        return True
+        cond1 = self.min_presence_ratio <= data.presence_ratio
+        cond2 = self.min_amplitude_cutoff <= data.amplitude_cutoff
+        cond3 = self.max_isi_violations >= data.isi_violations
+        cond = min([cond1,cond2,cond3])
+        return cond
 
 
 #########
