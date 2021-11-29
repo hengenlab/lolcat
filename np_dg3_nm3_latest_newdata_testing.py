@@ -94,9 +94,14 @@ def test(model, loader, writer, tag, epoch, device, class_names=None):
 
 def run(config, root, eval_batch_size=512, logdir=None):
     device = torch.device("cuda")
-
+    import pdb
+    pdb.set_trace()
+    
     # normalize
     train_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=config['num_bins'], min_presence_ratio=config['min_presence_ratio'], min_amplitude_cutoff=config['min_amplitude_cutoff'], max_isi_violations=config['max_isi_violations'])
+    
+
+    
     mean, std = compute_mean_std(train_dataset)
 
     # augmentation during training
@@ -207,9 +212,9 @@ def train_on_split(split_id):
         "weight_decay": 1e-4,
         "epochs": 1000,
         "milestones": [10, 100, 400],
-        "min_presence_ratio": 0.9,
-        "min_amplitude_cutoff": 0.1,
-        "max_isi_violations": 0.5
+        "min_presence_ratio": 0,
+        "min_amplitude_cutoff": 0,
+        "max_isi_violations": 100
         }
 
     run(config, root=data_root, logdir=logdir)

@@ -56,7 +56,7 @@ class InMemoryDataset(Dataset, ABC):
     def __len__(self):
         return len(self.data_list)
 
-    def processed_filename(self, split):
+    def processed_filename(self, split): #copy into class and edit to include filtering parameters in name
         return os.path.join(self.root, self.processed_dir,
                             '{}-data-seed:{}-num_bins:{}-{}_split.pt'.format(
                                 self.name, self.random_seed, self.num_bins, split))
@@ -291,6 +291,11 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
 
+    def processed_filename(self, split): #copy into class and edit to include filtering parameters in name
+        return os.path.join(self.root, self.processed_dir,
+                            '{}-data-seed:{}-num_bins:{}-{}_{}_{}-{}_split.pt'.format(
+                                    self.name, self.random_seed, self.num_bins, self.min_presence_ratio, self.min_amplitude_cutoff, self.max_isi_violations, split))
+ 
     def prepare_dataset(self, test_size=0.2, val_size=0.2):
         dataset = NeuropixelsDataset(self.root, self.stimulus)
         if self.k == '3':
@@ -310,11 +315,14 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
         return data
 
     def filter_data(self, data):
+        '''
         cond1 = self.min_presence_ratio <= data.presence_ratio
         cond2 = self.min_amplitude_cutoff <= data.amplitude_cutoff
         cond3 = self.max_isi_violations >= data.isi_violations
         cond = min([cond1,cond2,cond3])
         return cond
+        '''
+        return True
 
 
 class NeuropixelsNMTorchDataset(InMemoryDataset):
