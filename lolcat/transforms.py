@@ -5,10 +5,11 @@ from torch_geometric.data import Batch
 
 
 class Dropout:
-    def __init__(self, dropout_p, apply_p=1.0, adaptive=False):
+    def __init__(self, dropout_p, apply_p=1.0, adaptive=False, randomized=False):
         self.dropout_p = dropout_p
         self.apply_p = apply_p
         self.adaptive = adaptive
+        self.randomized = randomized
 
     def __call__(self, data):
         # make a copy from the data object
@@ -18,10 +19,13 @@ class Dropout:
             if self.adaptive:
                 dropout_p = 1 / (1 + x.sum(dim=1, keepdims=True))
                 dropout_p = dropout_p/dropout_p.mean()
-                dropout_p = dropout_p * self.dropout_p * torch.rand(1) # randomized dropout
+                dropout_p = dropout_p * self.dropout_p
                 dropout_p = torch.clip(dropout_p, 0., self.dropout_p).squeeze()
             else:
                 dropout_p = self.dropout_p
+
+            if self.randomized:
+                dropout_p *= torch.rand(1)
 
             # dropout entire trials
             dropout_mask = torch.empty((x.size(0),), dtype=torch.float32, device=x.device).uniform_(0, 1) > dropout_p
