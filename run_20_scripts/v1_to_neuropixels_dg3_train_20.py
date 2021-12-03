@@ -14,15 +14,21 @@ from torch_geometric.data import DataLoader
 from torch_geometric.nn import global_mean_pool
 from tqdm import tqdm
 
-from lolcat import NeuropixelsDGTorchDataset, NeuropixelsNMTorchDataset
+from lolcat import NeuropixelsDGTorchDataset, NeuropixelsNMTorchDataset, V1DGTorchDataset
 from lolcat import LOLCAT, MLP, GlobalAttention, MultiHeadPooling, init_last_layer_imbalance
 from lolcat import Dropout, compute_mean_std, Normalize, Compose
 from lolcat import MySampler
 from lolcat.visualization import plot_confusion_matrix
 
 
+def set_bn_eval(module):
+    for m in module.modules():
+        if isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.Dropout):
+            m.eval()
+
 def train(model, train_loader, criterion, optimizer, writer, current_step, device, class_names=None, unnormalize=None, *, logdir):
     model.train()
+    model.encoder.eval()
 
     for data in train_loader:
         x, batch, target = data.x, data.batch, data.y
@@ -92,20 +98,19 @@ def test(model, loader, writer, tag, epoch, device, class_names=None):
 def run(config, root, eval_batch_size=4096, logdir=None):
     device = torch.device("cuda")
 
-    # normalize
-    train_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90)
+    train_dataset = V1DGTorchDataset(root, 'train', k='4', random_seed='4', num_bins=config['num_bins'])
     mean, std = compute_mean_std(train_dataset)
 
     # augmentation during training
-    transform = Compose(Dropout(config['trial_dropout']), Normalize(mean, std, copy=False))
+    transform = Compose(Dropout(config['trial_dropout'], apply_p=0.6, randomized=True), Normalize(mean, std, copy=False))
     normalize = Normalize(mean, std)
 
     # get data
-    train_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90, transform=transform)
-    train_eval_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
-    val_dataset = NeuropixelsDGTorchDataset(root, 'val', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
-    test_dataset = NeuropixelsDGTorchDataset(root, 'test', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
-    nm_test_dataset = NeuropixelsNMTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=90, transform=normalize)
+    train_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=config['num_bins'], transform=transform)
+    train_eval_dataset = NeuropixelsDGTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=config['num_bins'], transform=normalize)
+    val_dataset = NeuropixelsDGTorchDataset(root, 'val', k='3', random_seed=config['split_seed'], num_bins=config['num_bins'], transform=normalize)
+    test_dataset = NeuropixelsDGTorchDataset(root, 'test', k='3', random_seed=config['split_seed'], num_bins=config['num_bins'], transform=normalize)
+    nm_test_dataset = NeuropixelsNMTorchDataset(root, 'train', k='3', random_seed=config['split_seed'], num_bins=config['num_bins'], transform=normalize)
 
     class_names = train_dataset.class_names
     num_classes = len(class_names)
@@ -129,22 +134,55 @@ def run(config, root, eval_batch_size=4096, logdir=None):
     if config['pool'] == 'mean':
         pool = global_mean_pool
     elif config['pool'] == 'attention':
-        pool = MultiHeadPooling(GlobalAttention(feature_size, feature_size//2, heads=1),
-                                GlobalAttention(feature_size, feature_size//2, heads=1),)
+        pool = MultiHeadPooling(GlobalAttention(feature_size, feature_size // 2, heads=1),
+                                GlobalAttention(feature_size, feature_size // 2, heads=1),
+                                GlobalAttention(feature_size, feature_size // 2, heads=1),
+                                GlobalAttention(feature_size, feature_size // 2, heads=1))
     else:
         raise ValueError
 
     model = LOLCAT(trial_encoder, classifier, pool=pool).to(device)
 
+    # load weights
+    current_state_dict = model.state_dict()
+    checkpoint_state_dict = torch.load('./runs/v1_dg_k=4/run_v1_4/model_early_stopping.pt').state_dict()
+
+    new_state_dict = dict()
+    for k, v in zip(current_state_dict.keys(), checkpoint_state_dict.values()):
+        if v.size() == current_state_dict[k].size():
+            new_state_dict[k] = v
+        else:
+            print('Warning: Ignoring {}, does not have the same size: {} and {}.'.format(k, v.size(), current_state_dict[k].size()))
+            new_state_dict[k] = current_state_dict[k]
+
+    model.load_state_dict(new_state_dict, strict=False)
+
+    # freeze layers
+    #for param in model.encoder.parameters():
+    #    param.requires_grad = False
+
+    #for param in model.pool.parameters():
+    #    param.requires_grad = False
+
+    # freeze bn and dropout
+    model.encoder.eval()
+
     # initialize last layer
     _, counts = torch.unique(train_dataset.target, return_counts=True)
     class_weights = counts / counts.sum()
-    oversampled_class_weights = sampler.factors * class_weights
+    oversampled_class_weights = class_weights * sampler.factors
     init_last_layer_imbalance(model.classifier, oversampled_class_weights)
 
     # training
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
+    #params = model.classifier.parameters() # list(model.pool.parameters()) + list(model.classifier.parameters())
+    #optimizer = optim.Adam(params, lr=config['lr'], weight_decay=config['weight_decay'])
+
+    optimizer = optim.Adam([{'params': model.classifier.parameters()},
+                            {'params': model.pool.parameters(), 'lr': config['lr']},
+                            {'params': model.encoder.parameters(), 'lr': 1e-4},],
+                           lr=config['lr'], weight_decay=config['weight_decay'])
+
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=config['milestones'], gamma=0.1)
 
     # logging
@@ -169,7 +207,7 @@ def run(config, root, eval_batch_size=4096, logdir=None):
         test(model, nm_test_loader, writer, 'test_nm', epoch, device, class_names=class_names)
 
         # update sampler
-        # train_loader.sampler.step(tlosses, ttargets, vlosses, vtargets)
+        #train_loader.sampler.step(tlosses, ttargets, vlosses, vtargets)
         writer.add_scalars('oversampling_factors',
                            {class_name: factor.item() for class_name, factor in zip(train_dataset.class_names, train_loader.sampler.factors)},
                            global_step=epoch)
@@ -188,16 +226,16 @@ def run(config, root, eval_batch_size=4096, logdir=None):
 
 def train_on_split(split_id):
     data_root = os.path.join(os.getcwd(), 'data/')  # path to data
-    logdir = './runs/neuropixels_dg_k=3/run_v1_{}'.format(split_id)
+    logdir = './runs/v1_to_neuropixels_dg_k=3/run_v20_{}'.format(split_id)
 
     config = {
         "split_seed": split_id,
         "trial_dropout": 0.4,
-        "num_bins": 90,
-        "batch_size": 64,
+        "num_bins": 128,
+        "batch_size": 128,
         "pool": 'attention',
-        "mlp_layers": [-1, 32, 16, 8],
-        "net_dropout": 0.5,
+        "mlp_layers": [128, 64, 32, 16, 16],
+        "net_dropout": 0.01,
         "batchnorm": True,
         "lr": 1e-3,
         "weight_decay": 1e-4,
