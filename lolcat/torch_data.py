@@ -40,7 +40,6 @@ class InMemoryDataset(Dataset, ABC):
             self.process()
 
         self.data_list = self.load()
-        print(target)
         self.set_target(target)
 
     def __getitem__(self, item):
@@ -67,7 +66,6 @@ class InMemoryDataset(Dataset, ABC):
 
     def load(self):
         filename = self.processed_filename(self.split)
-        print('filename',filename)
         processed = torch.load(filename)
         return processed['data_list']
 
@@ -117,7 +115,6 @@ class InMemoryDataset(Dataset, ABC):
         ...
 
     def set_target(self, label):
-        #print(label,self.data_list[0].keys)
         assert label in self.data_list[0].keys
         filename = self.processed_filename(self.split)
         filename = '{}_{}.pt'.format(os.path.splitext(filename)[0], label)
@@ -179,8 +176,7 @@ class V1DGTorchDataset(InMemoryDataset):
             dataset.filter_cells('4celltypes', keep=['e', 'Sst', 'Htr3a', 'Pvalb'])
         elif self.k == '3':
             dataset.filter_cells('3celltypes', keep=['Sst', 'Htr3a', 'Pvalb'])
-        if self.k == '13':
-
+        elif self.k == '13':
             dataset.filter_cells('13celltypes', keep=['e23', 'e6', 'i5Htr3a', 'i6Pvalb', 'i5Pvalb', 'i6Sst', 'i4Htr3a',
                                                       'i23Htr3a', 'e4', 'i1Htr3a', 'i4Sst', 'e5', 'i23Sst', 'i4Pvalb',
                                                       'i5Sst', 'i6Htr3a', 'i23Pvalb'])
@@ -189,6 +185,7 @@ class V1DGTorchDataset(InMemoryDataset):
 
         if isinstance(self.random_seed, str):
             dataset.load_train_val_test_split(self.predefined_split_filename)
+        else:
             dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed,
                                          stratify_by='16celltypes')
         return dataset
@@ -283,26 +280,39 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
     type = 'neuropixels'
     stimulus = 'drifting_gratings'
 
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,min_amplitude_cutoff=0,max_isi_violations=0):
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,max_amplitude_cutoff=0,max_isi_violations=0,subset=None):
         self.k = k
-        self.min_presence_ratio, self.min_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, min_amplitude_cutoff, max_isi_violations
+        self.subset = subset
+        self.min_presence_ratio, self.max_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, max_amplitude_cutoff, max_isi_violations
         target = {'3': 'subclass'}[self.k]
         name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
-
-    def processed_filename(self, split): #copy into class and edit to include filtering parameters in name
-        return os.path.join(self.root, self.processed_dir,
-                            '{}-data-seed:{}-num_bins:{}-{}_{}_{}-{}_split.pt'.format(
-                                    self.name, self.random_seed, self.num_bins, self.min_presence_ratio, self.min_amplitude_cutoff, self.max_isi_violations, split))
  
+    def processed_filename(self, split): #copy into class and edit to include filtering parameters in name
+        if self.subset is None:
+            return os.path.join(self.root, self.processed_dir,
+                                '{}-data-seed:{}-num_bins:{}-{}_split.pt'.format(
+                                    self.name, self.random_seed, self.num_bins, split))
+        else:
+            return os.path.join(self.root, self.processed_dir,
+                                '{}_{}-data-seed:{}-num_bins:{}-{}_split.pt'.format(
+                                    self.name, self.subset, self.random_seed, self.num_bins, split))            
+
     def prepare_dataset(self, test_size=0.2, val_size=0.2):
+
         dataset = NeuropixelsDataset(self.root, self.stimulus)
         if self.k == '3':
             dataset.filter_cells('subclass', keep=['Pvalb', 'Sst', 'Vip'])
         else:
             raise NotImplementedError
-
+        dataset.drop_dead_cells(cutoff=1)
+        if self.subset is not None:
+            if self.subset == 'ABO':
+                dataset.subset_sessions([798911424, 756029989, 760345702, 715093703, 791319847, 797828357, 762120172, 760693773, 721123822, 746083955, 755434585, 719161530, 751348571, 758798717, 762602078, 773418906])
+            if self.subset == 'FC':
+                dataset.subset_sessions([829720705, 839557629, 819701982, 835479236, 840012044, 839068429, 789848216, 831882777, 786091066, 787025148, 816200189, 794812542])
+                
         if isinstance(self.random_seed, str):
             dataset.load_train_val_test_split(self.predefined_split_filename)
         else:
@@ -315,25 +325,44 @@ class NeuropixelsDGTorchDataset(InMemoryDataset):
         return data
 
     def filter_data(self, data):
+        #this allows nans to pass the filter
+        nan_check = max([np.isnan(self.min_presence_ratio),np.isnan(self.max_presence_ratio),np.isnan(self.max_isi_violations)])
+        if nan_check == True:
+            print(f'nan pass from session {self.session_name}')
+            return True
+        else:
+            cond1 = self.min_presence_ratio <= data.presence_ratio
+            cond2 = self.max_amplitude_cutoff >= data.amplitude_cutoff
+            cond3 = self.max_isi_violations >= data.isi_violations
+            cond = min([cond1,cond2,cond3])
+            return cond
+
+    def filter_data(self, data):
         '''
         cond1 = self.min_presence_ratio <= data.presence_ratio
-        cond2 = self.min_amplitude_cutoff <= data.amplitude_cutoff
+        cond2 = self.max_amplitude_cutoff >= data.amplitude_cutoff
         cond3 = self.max_isi_violations >= data.isi_violations
         cond = min([cond1,cond2,cond3])
-        return cond
         '''
         return True
-
-
+    
+    @property
+    def increase_factor(self):
+        if self.k == '3':
+            increase_factor = torch.FloatTensor([1.,8.,9.])
+        else:
+            raise NotImplementedError
+        return increase_factor
+    
 class NeuropixelsNMTorchDataset(InMemoryDataset):
     type = 'neuropixels'
     stimulus = 'naturalistic_movies'
 
-    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,min_amplitude_cutoff=0,max_isi_violations=0):
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,max_amplitude_cutoff=0,max_isi_violations=0):
         self.k = k
         target = {'3': 'subclass'}[self.k]
         name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
-        self.min_presence_ratio, self.min_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, min_amplitude_cutoff, max_isi_violations
+        self.min_presence_ratio, self.max_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, max_amplitude_cutoff, max_isi_violations
         super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
                          force_process=force_process, lite=lite)
 
@@ -343,7 +372,7 @@ class NeuropixelsNMTorchDataset(InMemoryDataset):
             dataset.filter_cells('subclass', keep=['Pvalb', 'Sst', 'Vip'])
         else:
             raise NotImplementedError
-
+        dataset.drop_dead_cells(cutoff=1)
         if isinstance(self.random_seed, str):
             dataset.load_train_val_test_split(self.predefined_split_filename)
         else:
@@ -357,11 +386,82 @@ class NeuropixelsNMTorchDataset(InMemoryDataset):
 
     def filter_data(self, data):
         cond1 = self.min_presence_ratio <= data.presence_ratio
-        cond2 = self.min_amplitude_cutoff <= data.amplitude_cutoff
+        cond2 = self.max_amplitude_cutoff >= data.amplitude_cutoff
         cond3 = self.max_isi_violations >= data.isi_violations
         cond = min([cond1,cond2,cond3])
         return cond
 
+    @property
+    def increase_factor(self):
+        if self.k == '3':
+            increase_factor = torch.FloatTensor([1.,8.,9.])
+        else:
+            raise NotImplementedError
+        return increase_factor
+    
+class NeuropixelsNM1TorchDataset(InMemoryDataset):
+    type = 'neuropixels'
+    stimulus = 'naturalistic_movies_one'
+
+    def __init__(self, root, split, k, *, random_seed=123, num_bins=90, transform=None, force_process=False, lite=True, min_presence_ratio=0,max_amplitude_cutoff=0,max_isi_violations=0,subset=None):
+        self.k = k
+        target = {'3': 'subclass'}[self.k]
+        name = 'neuropixels_{}_{}'.format(self.stimulus, self.k)
+        self.min_presence_ratio, self.max_amplitude_cutoff, self.max_isi_violations = min_presence_ratio, max_amplitude_cutoff, max_isi_violations
+        self.subset = subset
+        super().__init__(name, root, split, target, random_seed=random_seed, num_bins=num_bins, transform=transform,
+                         force_process=force_process, lite=lite)
+
+    def prepare_dataset(self, test_size=0.2, val_size=0.2):
+        dataset = NeuropixelsDataset(self.root, self.stimulus)
+        if self.k == '3':
+            dataset.filter_cells('subclass', keep=['Pvalb', 'Sst', 'Vip'])
+        else:
+            raise NotImplementedError
+        dataset.drop_dead_cells(cutoff=1)
+        if self.subset is not None:
+            if self.subset == 'ABO':
+                dataset.subset_sessions([715093703, 791319847,797828357,798911424,719161530, 721123822, 746083955, 751348571, 755434585, 756029989, 758798717, 760345702, 760693773, 762120172, 762602078, 773418906])
+            if self.subset == 'FC':
+                dataset.subset_sessions([786091066, 787025148, 789848216, 794812542, 816200189, 819701982, 829720705, 831882777, 835479236, 839068429, 839557629, 840012044])
+        if isinstance(self.random_seed, str):
+            dataset.load_train_val_test_split(self.predefined_split_filename)
+        else:
+            dataset.train_val_test_split(test_size=test_size, val_size=val_size, random_seed=self.random_seed, stratify_by='subclass')
+        return dataset
+
+    def processed_filename(self, split): #copy into class and edit to include filtering parameters in name
+        if self.subset is None:
+            return os.path.join(self.root, self.processed_dir,
+                                '{}-data-seed:{}-num_bins:{}-{}_split.pt'.format(
+                                    self.name, self.random_seed, self.num_bins, split))
+        else:
+            return os.path.join(self.root, self.processed_dir,
+                                '{}_{}-data-seed:{}-num_bins:{}-{}_split.pt'.format(
+                                    self.name, self.subset, self.random_seed, self.num_bins, split))       
+    
+    def compute_feats(self, data):
+        data['x'] = compute_isi_distribution(data['spikes'], num_bins=self.num_bins, a_min=0., a_max=3.0, add_origin=True)
+        data['x_global'] = compute_isi_distribution(data['spike_blocks'], num_bins=180, a_min=0., a_max=6.0)
+        return data
+
+    def filter_data(self, data):
+        '''
+        cond1 = self.min_presence_ratio <= data.presence_ratio
+        cond2 = self.max_amplitude_cutoff >= data.amplitude_cutoff
+        cond3 = self.max_isi_violations >= data.isi_violations
+        cond = min([cond1,cond2,cond3])
+        '''
+        return True
+
+    @property
+    def increase_factor(self):
+        if self.k == '3':
+            increase_factor = torch.FloatTensor([1.,8.,9.])
+        else:
+            raise NotImplementedError
+        return increase_factor
+    
 
 #########
 # Utils #

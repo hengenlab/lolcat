@@ -62,10 +62,11 @@ class Dataset:
         # drop cells here
         # find neurons that satisfy the criteria in self.spike_times
         keep_mask = [((sts.size >= cutoff) and not (np.isnan(np.sum(sts)))) for sts in self.spike_times]
-
         self.cell_ids = self.cell_ids[keep_mask]
         self.spike_times = self.spike_times[keep_mask]
         self.cell_metadata = self.cell_metadata[keep_mask]
+        if hasattr(self, 'session_ids'):
+            self.session_ids = self.session_ids[keep_mask]
 
     def filter_cells(self, field, *, keep=None, drop=None):
         assert (keep is not None) != (drop is not None)
@@ -89,6 +90,18 @@ class Dataset:
         self.cell_metadata = self.cell_metadata[mask]
         if hasattr(self, 'session_ids'):
             self.session_ids = self.session_ids[mask]
+
+    def subset_sessions(self, kept_session_ids):
+        # keep only a subset of neurons
+        from collections import Counter
+        print(dict(Counter(self.session_ids)))
+        print('id_lens',len(self.session_ids),len(self.cell_ids))
+        keep_mask = [self.session_names[sid] in kept_session_ids for sid in self.session_ids]
+    
+        self.cell_ids = self.cell_ids[keep_mask]
+        self.spike_times = self.spike_times[keep_mask]
+        self.cell_metadata = self.cell_metadata[keep_mask]
+        self.session_ids = self.session_ids[keep_mask]
 
     ###########################
     # SPLIT TO TRAIN/VAL/TEST #
@@ -393,6 +406,9 @@ class CalciumDataset(Dataset):
             elif self.stimulus == 'naturalistic_movies':
                 start, end = np.array(df_session[0::90].start), np.array(df_session[89::90].end)
                 metadata = df_session[0::90].to_numpy()
+            elif self.stimulus == 'naturalistic_movies_one':
+                start, end = np.array(df_session[0::90].start), np.array(df_session[89::90].end)
+                metadata = df_session[0::90].to_numpy()                
 
             trial_metadata.append(metadata)
             trial_metadata_header = df_session.columns.to_list()
@@ -480,22 +496,25 @@ class CalciumDataset(Dataset):
         return data
 
 
-class NeuropixelsDataset(CalciumDataset):
+class NeuropixelsDataset(Dataset):
     name = 'neuropixels'
 
     cell_metadata_filename = {
         'drifting_gratings':  'neuropixels_nodes.csv',
-        'naturalistic_movies': 'neuropixels_all_nm_nodes.csv'
+        'naturalistic_movies': 'neuropixels_all_nm_nodes.csv',
+        'naturalistic_movies_one': 'neuropixels_nm1_nodes.csv'
     }
 
     session_filename = {
-        'drifting_gratings': 'neuropixels_times_drifting_gratings.csv',
+        'drifting_gratings': 'neuropixels_times_drifting_gratings_no_bads.csv',
         'naturalistic_movies': 'neuropixels_times_natural_movie_three_no_bads.csv',
+        'naturalistic_movies_one': 'neuropixels_times_natural_movie_one_no_invalids.csv'
     }
 
     spike_filename = {
         'drifting_gratings': 'neuropixels_spikes_unaligned.csv',
-        'naturalistic_movies': 'neuropixels_all_nm_spikes_unaligned.csv'
+        'naturalistic_movies': 'neuropixels_all_nm_spikes_unaligned.csv',
+        'naturalistic_movies_one': 'neuropixels_nm1_spikes_unaligned.csv'
     }
 
     def __init__(self, root_dir, stimulus, force_process=False):
@@ -503,3 +522,164 @@ class NeuropixelsDataset(CalciumDataset):
 
     def _load_extra_metadata(self):
         return [], []
+
+    def __init__(self, root_dir, stimulus, force_process=False):
+        assert stimulus in ['drifting_gratings', 'naturalistic_movies','naturalistic_movies_one']
+        self.stimulus = stimulus
+
+        data_source = self.name + '_' + self.stimulus
+        super(NeuropixelsDataset, self).__init__(root_dir, data_source=data_source, force_process=force_process)
+
+    def process(self):
+        print('Processing data.')
+        # load cell metadata
+        self.cell_ids, self.session_ids, self.session_names, \
+        self.cell_metadata, self.cell_metadata_header = self._load_cell_metadata()
+
+        # load extra cell metadata
+
+        extra_metadata, extra_header = self._load_extra_metadata()
+        if len(extra_header) != 0:
+            self.cell_metadata = np.hstack([self.cell_metadata, extra_metadata])
+            self.cell_metadata_header = self.cell_metadata_header + extra_header
+
+
+        # load cell spike times
+        self.spike_times = self._load_spike_data()
+        
+        # load session metadata
+        self.session_metadata, self.trial_metadata, self.trial_metadata_header = self._load_session_metadata()
+
+    ################
+    # LOADING DATA #
+    ################
+    def _load_cell_metadata(self):
+        filename = os.path.join(self.root_dir, self.raw_dir, self.cell_metadata_filename[self.stimulus])
+        df = pd.read_csv(filename, index_col='id')
+        '''
+        if self.name == 'neuropixels':
+            df = df[~df.isnull().any(axis=1)]
+        '''
+        # sort cells by id
+        df.sort_index(inplace=True)
+        
+        # Get cell ids
+        cell_ids = df.index.to_numpy()
+        # Get session ids
+        session_ids, session_names = pd.factorize(df['session_id'].astype(np.int))
+        session_names = session_names.to_list()
+
+        df = df.drop('session_id', axis=1)
+        if 'Unnamed: 0' in df.columns:
+            df = df.drop('Unnamed: 0', axis=1)
+
+        cell_metadata_header = df.columns.to_list()
+        cell_metadata = df.to_numpy()
+
+        return cell_ids, session_ids, session_names, cell_metadata, cell_metadata_header
+
+    def _load_session_metadata(self):
+        filename = os.path.join(self.root_dir, self.raw_dir, self.session_filename[self.stimulus])
+        #print('session filename:',filename)
+        df = pd.read_csv(filename)
+
+        df.start = df.start / 1000.  # convert to seconds
+        df.end = df.end / 1000.  # convert to seconds
+
+        session_metadata = [{} for _ in range(self.num_sessions)]
+        trial_metadata = []
+        for session_name in df.session_id.unique():
+            df_session = df[df.session_id == session_name]
+            df_session = df_session.drop('session_id', axis=1)
+            if self.stimulus == 'drifting_gratings':
+                start, end = np.array(df_session.start), np.array(df_session.end)
+                metadata = df_session.to_numpy()
+            elif self.stimulus == 'naturalistic_movies':
+                start, end = np.array(df_session[0::90].start), np.array(df_session[89::90].end)
+                metadata = df_session[0::90].to_numpy()
+            elif self.stimulus == 'naturalistic_movies_one':
+                start, end = np.array(df_session[0::90].start), np.array(df_session[89::90].end)
+                metadata = df_session[0::90].to_numpy()                
+
+            trial_metadata.append(metadata)
+            trial_metadata_header = df_session.columns.to_list()
+
+            if self.name == 'calcium' and self.stimulus == 'drifting_gratings':
+                start_, end_ = np.array(df_session.start), np.array(df_session.end)
+                i1, i2 = np.where((start_[1:] - end_[:-1]) > 30)[0] + 1
+                blocks = [(start_[0], end_[i1 - 1]), (start_[i1], end_[i2 - 1]), (start_[i2], end_[-1])]
+            elif self.name == 'calcium' and self.stimulus == 'naturalistic_movies':
+                start_, end_ = np.array(df_session.start), np.array(df_session.end)
+                i = np.where((start_[1:] - end_[:-1]) > 30)[0] + 1
+                blocks = [(start_[0], end_[i - 1]), (start_[i], end_[-1])]
+            else:
+                start_, end_ = np.array(df_session.start), np.array(df_session.end)
+                blocks = [(start_[0], end_[-1])]
+
+            
+            if session_name in self.session_names:
+                session_id = self.session_names.index(session_name)
+                session_metadata[session_id] = {'trials': (start, end), 'blocks': blocks}
+            else:
+                print('No cells from session: {}.'.format(session_name))
+
+            
+            
+               
+        return session_metadata, trial_metadata, trial_metadata_header
+
+    def _load_spike_data(self):
+        filename = os.path.join(self.root_dir, self.raw_dir, self.spike_filename[self.stimulus])
+        df = pd.read_csv(filename, usecols=['timestamps', 'node_ids'])  # only load the necessary columns
+        df.timestamps = df.timestamps / 1000  # convert to seconds
+
+        # perform inner join
+        cell_series = pd.Series(self.cell_ids, name='node_ids')  # get index of cells of interest
+        df = df.merge(cell_series, how='right', on='node_ids')  # do a one-to-many mapping so that cells that are not
+        # needed are filtered out and that cells that do not
+        # fire have associated nan row.
+        assert df.node_ids.is_monotonic  # verify that nodes are sorted
+        spiketimes = df.groupby(['node_ids'])['timestamps'].apply(np.array).to_numpy()  # group spike times for each
+        # cell and create an array.
+        return spiketimes
+
+
+    ##############
+    # PROPERTIES #
+    ##############
+    @property
+    def num_sessions(self):
+        return len(self.session_names) if self.session_names is not None else 1
+
+    ############
+    # Get data #
+    ############
+    def __getitem__(self, item):
+        data = defaultdict(list)
+
+        # get trial windows
+        session_id = self.session_ids[item]
+        session_metadata = self.session_metadata[session_id]
+        
+
+        for start_time, end_time in zip(*session_metadata['trials']):
+            data['spikes'].append(self._select_data(item, start_time, end_time) - start_time)
+
+        for start_time, end_time in session_metadata['blocks']:
+            data['spike_blocks'].append(self._select_data(item, start_time, end_time) - start_time)
+
+        data = dict(data)
+
+        data['session_id'] = session_id
+
+        # add trial metadata
+        for i, header in enumerate(self.trial_metadata_header):
+            data[header] = self.trial_metadata[session_id][:, i]
+
+        # add cell metadata
+        for i, header in enumerate(self.cell_metadata_header):
+            data[header] = self.cell_metadata[item, i]
+        return data
+
+
+    

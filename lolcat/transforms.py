@@ -2,6 +2,7 @@ import copy
 
 import torch
 from torch_geometric.data import Batch
+import numpy as np
 
 
 class Dropout:
@@ -32,7 +33,7 @@ class Dropout:
             data.x = x[dropout_mask]
         return data
 
-
+    
 class Normalize:
     def __init__(self, mean, std, copy=True):
         self.mean = mean
@@ -66,3 +67,25 @@ def compute_mean_std(dataset):
     data = Batch.from_data_list(dataset)
     std, mean = torch.std_mean(data.x, dim=0, unbiased=False, keepdim=True)
     return mean, std
+
+
+def mixup(y, batch, alpha=0.5):
+    unique_class_ids = torch.unique(y)
+    for unique_class_id in unique_class_ids:
+        samples_from_same_class = torch.where(y == unique_class_id)[0]
+        for i in range(samples_from_same_class.size(0) // 2):
+            samples_to_mix = samples_from_same_class[i:i+2]
+
+            sample_1_id, sample_2_id = samples_to_mix[0], samples_to_mix[1]
+
+            sample_1_nodes = torch.where(batch == sample_1_id)[0]
+            sample_2_nodes = torch.where(batch == sample_2_id)[0]
+
+            lam = np.random.beta(alpha, alpha)
+            num_trials_to_swap = int(min(sample_1_nodes.size(0),sample_2_nodes.size(0)) * lam)
+            trials_1_to_swap = sample_1_nodes[torch.randperm(sample_1_nodes.size(0))[:num_trials_to_swap]]
+            trials_2_to_swap = sample_2_nodes[torch.randperm(sample_2_nodes.size(0))[:num_trials_to_swap]]
+            batch[trials_1_to_swap] = sample_2_id
+            batch[trials_2_to_swap] = sample_1_id
+    return batch
+    
